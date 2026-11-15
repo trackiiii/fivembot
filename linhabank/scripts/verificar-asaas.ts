@@ -51,6 +51,26 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       { status: 200, headers: { "content-type": "application/json" } },
     );
   }
+  if (url.includes("/v3/myAccount/fees")) {
+    return new Response(
+      JSON.stringify({
+        payment: {
+          pix: {
+            fixedFeeValue: 1.99,
+            fixedFeeValueWithDiscount: 0.99,
+            percentageFee: 0,
+            discountExpiration: "2099-05-19 00:00:00",
+            monthlyCreditsWithoutFee: 0,
+          },
+        },
+        transfer: {
+          monthlyTransfersWithoutFee: 30,
+          pix: { feeValue: 2, discountValue: null, consideredInMonthlyTransfersWithoutFee: true },
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }
   if (url.endsWith("/v3/transfers")) {
     if (chaveInvalida) {
       return new Response(
@@ -78,9 +98,14 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 };
 
 const { aceitarTermos, creditarPixRecebido, estornarPixExterno, operarConta } = await import("../bot/lib/banco.js");
-const { avisoDePagamentoAsaas, lerEventoAsaas, referenciaTransferenciaAsaas, tipoChaveAsaas } = await import(
-  "../bot/lib/asaas.js"
-);
+const {
+  avisoDePagamentoAsaas,
+  consultarTaxasAsaas,
+  lerEventoAsaas,
+  referenciaTransferenciaAsaas,
+  taxasDeJsonAsaas,
+  tipoChaveAsaas,
+} = await import("../bot/lib/asaas.js");
 const { pspAtual, rotuloLiquidacao } = await import("../bot/lib/psp.js");
 
 function assert(condicao: boolean, mensagem: string): void {
@@ -288,6 +313,40 @@ assert(rotuloLiquidacao() === "Asaas (produção)", `rotulo ${rotuloLiquidacao()
     "homologacao nao gerou QR Asaas",
   );
   process.env.LINHABANK_MODO = "live";
+}
+
+{
+  const vigentes = taxasDeJsonAsaas({
+    payment: {
+      pix: {
+        fixedFeeValue: 1.99,
+        fixedFeeValueWithDiscount: 0.99,
+        percentageFee: 0.5,
+        discountExpiration: "2099-01-01 00:00:00",
+      },
+    },
+    transfer: {
+      monthlyTransfersWithoutFee: 30,
+      pix: { feeValue: 5, discountValue: 2, expirationDate: "2099-01-01 00:00:00" },
+    },
+  });
+  assert(vigentes?.taxaCentavos === 200, "desconto de envio asaas");
+  assert(vigentes?.recebimentoCentavos === 99, "desconto de recebimento asaas");
+  assert(vigentes?.recebimentoPercentual === "0,5", `percentual asaas ${vigentes?.recebimentoPercentual}`);
+  assert(vigentes?.envioGratisMes === 30, "isencoes mensais asaas");
+  const vencidas = taxasDeJsonAsaas({
+    payment: { pix: { fixedFeeValue: 1.99, fixedFeeValueWithDiscount: 0.99, discountExpiration: "2000-01-01" } },
+    transfer: { pix: { feeValue: 5, discountValue: 2, expirationDate: "2000-01-01" } },
+  });
+  assert(vencidas?.taxaCentavos === 500 && vencidas.recebimentoCentavos === 199, "desconto vencido asaas");
+  const consulta = await consultarTaxasAsaas();
+  const fees = precisa(
+    chamadas.find((item) => item.url.includes("/v3/myAccount/fees") && item.method === "GET"),
+    "nao chamou /v3/myAccount/fees/",
+  );
+  assert(consulta?.taxaCentavos === 200 && consulta.recebimentoCentavos === 99, "consulta de taxas asaas");
+  assert(consulta?.envioGratisMes === 30, "consulta sem isencoes");
+  assert(fees.body === "" && fees.headers["content-type"] === undefined, "GET de taxas com body");
 }
 
 assert(avisoDePagamentoAsaas({ event: "PAYMENT_CONFIRMED", payment: { id: "pay_x1234567", value: 10 } }) === undefined, "confirmado creditou");

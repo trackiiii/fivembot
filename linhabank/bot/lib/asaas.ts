@@ -126,6 +126,48 @@ export function rotuloAsaas(): string {
   return ambienteAsaas() === "sandbox" ? "Asaas (sandbox)" : "Asaas (produção)";
 }
 
+export type TaxasPsp = {
+  origem: string;
+  taxaCentavos: number;
+  taxaPercentual: string;
+  recebimentoCentavos: number;
+  recebimentoPercentual: string;
+  envioGratisMes?: number;
+  recebimentoGratisMes?: number;
+};
+
+export function taxasDeJsonAsaas(json: Record<string, unknown>, origem = "Asaas"): TaxasPsp | undefined {
+  const pagamento = objeto(json.payment);
+  const transferencia = objeto(json.transfer);
+  const pixRecebido = objeto(pagamento?.pix);
+  const pixEnvio = objeto(transferencia?.pix);
+  if (pixRecebido === undefined && pixEnvio === undefined) return undefined;
+  const envioReais = tarifaVigente(pixEnvio?.feeValue, pixEnvio?.discountValue, pixEnvio?.expirationDate);
+  const recebidoReais = tarifaVigente(
+    pixRecebido?.fixedFeeValue,
+    pixRecebido?.fixedFeeValueWithDiscount,
+    pixRecebido?.discountExpiration,
+  );
+  const envioGratis = inteiroNaoNegativo(transferencia?.monthlyTransfersWithoutFee);
+  const recebidoGratis = inteiroNaoNegativo(pixRecebido?.monthlyCreditsWithoutFee);
+  return {
+    origem,
+    taxaCentavos: reaisParaCentavos(envioReais),
+    taxaPercentual: "0",
+    recebimentoCentavos: reaisParaCentavos(recebidoReais),
+    recebimentoPercentual: percentualDeNumero(numeroFinito(pixRecebido?.percentageFee)),
+    ...(envioGratis !== undefined ? { envioGratisMes: envioGratis } : {}),
+    ...(recebidoGratis !== undefined ? { recebimentoGratisMes: recebidoGratis } : {}),
+  };
+}
+
+export async function consultarTaxasAsaas(): Promise<TaxasPsp | undefined> {
+  if (!asaasConfigurado()) return undefined;
+  const resposta = await chamarAsaas("GET", "/v3/myAccount/fees/");
+  if (!resposta.ok) return undefined;
+  return taxasDeJsonAsaas(resposta.json, rotuloAsaas() || "Asaas");
+}
+
 export function chaveQrAsaas(qrId: string): string {
   return `linhabank:asaas:qr:${qrId}`;
 }
@@ -278,16 +320,17 @@ async function chamarAsaas(metodo: "GET" | "POST", caminho: string, corpo?: Reco
   const token = chaveAsaas();
   if (token.length === 0) return { ok: false, status: 0, json: {} };
   try {
+    const headers: Record<string, string> = {
+      accept: "application/json",
+      "user-agent": AGENT,
+      access_token: token,
+    };
+    if (metodo === "POST") headers["content-type"] = "application/json";
     const resposta = await fetch(`${urlAsaas()}${caminho}`, {
       method: metodo,
       redirect: "error",
       signal: AbortSignal.timeout(15000),
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        "user-agent": AGENT,
-        access_token: token,
-      },
+      headers,
       body: metodo === "POST" ? JSON.stringify(corpo ?? {}) : undefined,
     });
     const json = (await resposta.json().catch(() => ({}))) as Record<string, unknown>;
@@ -296,6 +339,41 @@ async function chamarAsaas(metodo: "GET" | "POST", caminho: string, corpo?: Reco
   } catch {
     return { ok: false, status: 0, json: {} };
   }
+}
+
+function objeto(valor: unknown): Record<string, unknown> | undefined {
+  if (valor === null || typeof valor !== "object" || Array.isArray(valor)) return undefined;
+  return valor as Record<string, unknown>;
+}
+
+function numeroFinito(valor: unknown): number | undefined {
+  return typeof valor === "number" && Number.isFinite(valor) ? valor : undefined;
+}
+
+function inteiroNaoNegativo(valor: unknown): number | undefined {
+  const n = numeroFinito(valor);
+  if (n === undefined || !Number.isSafeInteger(n) || n < 0 || n > 1_000_000) return undefined;
+  return n;
+}
+
+function reaisParaCentavos(reais: number): number {
+  if (!Number.isFinite(reais) || reais <= 0) return 0;
+  return Math.min(500_000, Math.max(0, Math.round(reais * 100)));
+}
+
+function percentualDeNumero(valor: number | undefined): string {
+  if (valor === undefined || !Number.isFinite(valor) || valor <= 0) return "0";
+  return valor.toFixed(2).replace(".", ",").replace(/0+$/, "").replace(/,$/, "") || "0";
+}
+
+function tarifaVigente(padrao: unknown, desconto: unknown, expiracao: unknown): number {
+  const base = Math.max(0, numeroFinito(padrao) ?? 0);
+  const promo = numeroFinito(desconto);
+  if (promo === undefined || promo < 0) return base;
+  if (typeof expiracao !== "string" || expiracao.trim().length === 0) return promo;
+  const ate = Date.parse(expiracao);
+  if (!Number.isFinite(ate) || ate > Date.now()) return promo;
+  return base;
 }
 
 function mapearErroEnvio(resposta: { status: number; json: Record<string, unknown> }): RespostaEnvio {

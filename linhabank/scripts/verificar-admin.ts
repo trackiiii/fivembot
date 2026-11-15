@@ -209,6 +209,49 @@ function semIa(texto: string): void {
 }
 
 {
+  const originalFetch = globalThis.fetch;
+  const gatewayUrl = process.env.PIX_GATEWAY_URL;
+  const gatewayToken = process.env.PIX_GATEWAY_TOKEN;
+  delete process.env.PIX_GATEWAY_URL;
+  delete process.env.PIX_GATEWAY_TOKEN;
+  if ((process.env.ASAAS_API_KEY ?? "").trim().length < 20) {
+    process.env.ASAAS_API_KEY = "$aact_prod_linhabank_test_key_00000000";
+  }
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.includes("/v3/myAccount/fees")) {
+      return new Response(
+        JSON.stringify({
+          payment: { pix: { fixedFeeValue: 0.99, percentageFee: 0 } },
+          transfer: { monthlyTransfersWithoutFee: 30, pix: { feeValue: 2 } },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    throw new Error(`rede bloqueada no teste admin: ${new URL(url).host}`);
+  };
+  try {
+    const kv = kvMemoria();
+    await gravarConfig(kv, { chatsAdmin: "1001", taxaCentavos: 150, taxaPercentual: "1,50" });
+    const atualizado = await aplicarAcao(kv, "1001", "a:r");
+    assert(configAtual().taxaCentavos === 200, `tarifa da gateway ${configAtual().taxaCentavos}`);
+    assert(configAtual().taxaPercentual === "0", `percentual da gateway ${configAtual().taxaPercentual}`);
+    assert((atualizado.aviso ?? "").includes("envio PIX R$ 2,00"), `aviso atualizar: ${atualizado.aviso}`);
+    await aplicarAcao(kv, "1001", "a:g");
+    const tarifas = await montarTela(kv, "1001");
+    assert(tarifas.texto.includes("envio: R$ 2,00"), "tarifas sem a tarifa de envio da gateway");
+    assert(tarifas.texto.includes("recebimento: R$ 0,99"), "tarifas sem a tarifa de recebimento da gateway");
+    assert(taxaPixExternoCentavos(10_000) === 200, "tarifa da gateway não entrou no PIX externo");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (gatewayUrl === undefined) delete process.env.PIX_GATEWAY_URL;
+    else process.env.PIX_GATEWAY_URL = gatewayUrl;
+    if (gatewayToken === undefined) delete process.env.PIX_GATEWAY_TOKEN;
+    else process.env.PIX_GATEWAY_TOKEN = gatewayToken;
+  }
+}
+
+{
   const kv = kvMemoria();
   await garantirConfig(kv);
   assert(modoCarteira() === "sandbox", "kv vazio não voltou ao padrão");

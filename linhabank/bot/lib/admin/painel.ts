@@ -15,13 +15,14 @@ import {
 } from "../banco.js";
 import { idCanalValido } from "../canal.js";
 import { configAtual, garantirConfig, gravarConfig, unirChatsAdmin } from "../config.js";
-import { rotuloLiquidacao } from "../psp.js";
+import { consultarTaxasGateway, rotuloLiquidacao, type TaxasPsp } from "../psp.js";
 import { dataHoraBrasil, formatarQuando } from "../horario.js";
 import { ehAdmin, emSandbox } from "../modo.js";
 import { taxaPixExternoCentavos } from "../taxa.js";
 
 export const CHAVE_UI = (chatId: string) => `linhabank:admin:ui:${chatId}`;
 export const CHAVE_PENDENTE = (chatId: string) => `linhabank:admin:pendente:${chatId}`;
+export const CHAVE_TAXAS_GATEWAY = "linhabank:taxas-gateway";
 
 export type AbaAdmin = "visao" | "contas" | "pix" | "ledger" | "config" | "liveok" | "ficha" | "extrato";
 export type CampoPendente =
@@ -172,7 +173,7 @@ export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdm
   if (ui.aba === "contas") return telaContas(painel, ui.pagina);
   if (ui.aba === "pix") return telaPix(painel, ui.pagina, config.modo, await contarAgendamentosAtivos(kv));
   if (ui.aba === "ledger") return telaMovimento(painel, ui.pagina);
-  if (ui.aba === "config") return telaParametros(config);
+  if (ui.aba === "config") return telaParametros(config, await lerTaxasGateway(kv));
   if (ui.aba === "ficha") return telaFicha(painel, ui.indice ?? 0);
   if (ui.aba === "extrato") return telaExtrato(kv, painel, ui.indice ?? 0);
   return telaResumo(painel, config, await contarAgendamentosAtivos(kv));
@@ -195,7 +196,8 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
     return { tela: await montarTela(kv, chatId) };
   }
   if (acao.tipo === "atualizar") {
-    return { tela: await montarTela(kv, chatId), aviso: "Posição atualizada." };
+    const aviso = await sincronizarTaxasGateway(kv);
+    return { tela: await montarTela(kv, chatId), aviso };
   }
   if (acao.tipo === "modo") {
     if (acao.modo === "sandbox") {
@@ -654,7 +656,10 @@ function telaMovimento(painel: Awaited<ReturnType<typeof painelCarteira>>, pagin
   };
 }
 
-function telaParametros(config: ReturnType<typeof configAtual>): TelaAdmin {
+function telaParametros(
+  config: ReturnType<typeof configAtual>,
+  gateway?: TaxasPsp & { em?: string },
+): TelaAdmin {
   const amostra = taxaPixExternoCentavos(10_000);
   const texto = [
     "Parametrização operacional",
@@ -666,6 +671,7 @@ function telaParametros(config: ReturnType<typeof configAtual>): TelaAdmin {
     `Tarifa PIX externo: R$ ${reaisDe(config.taxaCentavos)} + ${config.taxaPercentual}%`,
     `Exemplo em R$ 100,00: R$ ${reaisDe(amostra)}`,
     "Tarifa PIX interno: isento",
+    ...linhasTaxasGateway(gateway),
     `Limite por operação: R$ ${reaisDe(config.limiteCentavos)}`,
     `Identificação no atendimento: ${config.prefixoThialinha ? "ativa" : "inativa"}`,
     `Canal digital: ${config.botaoMiniApp ? "ativo" : "inativo"}`,
@@ -802,6 +808,59 @@ function rotuloEstado(estado: string): string {
   if (estado === "conta_ausente") return "conta inexistente";
   if (estado === "valor_invalido" || estado === "valor_divergente") return "valor divergente";
   return estado;
+}
+
+async function sincronizarTaxasGateway(kv: HostKvApi): Promise<string> {
+  const psp = rotuloLiquidacao();
+  const taxas = await consultarTaxasGateway();
+  if (taxas === undefined) {
+    if (psp.startsWith("Asaas")) return "Asaas indisponível. Tarifas não alteradas.";
+    if (psp === "convênio ativo") return "Convênio HTTP não informa tarifas. Posição atualizada.";
+    return "Posição atualizada.";
+  }
+  await gravarConfig(kv, { taxaCentavos: taxas.taxaCentavos, taxaPercentual: taxas.taxaPercentual });
+  await kv.put(CHAVE_TAXAS_GATEWAY, {
+    origem: taxas.origem,
+    taxaCentavos: taxas.taxaCentavos,
+    taxaPercentual: taxas.taxaPercentual,
+    recebimentoCentavos: taxas.recebimentoCentavos,
+    recebimentoPercentual: taxas.recebimentoPercentual,
+    ...(taxas.envioGratisMes !== undefined ? { envioGratisMes: taxas.envioGratisMes } : {}),
+    ...(taxas.recebimentoGratisMes !== undefined ? { recebimentoGratisMes: taxas.recebimentoGratisMes } : {}),
+    em: new Date().toISOString(),
+  });
+  return avisoTaxasGateway(taxas);
+}
+
+async function lerTaxasGateway(kv: HostKvApi): Promise<(TaxasPsp & { em?: string }) | undefined> {
+  const bruto = await kv.get(CHAVE_TAXAS_GATEWAY);
+  if (bruto === null || bruto === undefined || typeof bruto !== "object" || Array.isArray(bruto)) return undefined;
+  if (typeof bruto.origem !== "string" || typeof bruto.taxaCentavos !== "number") return undefined;
+  return {
+    origem: bruto.origem,
+    taxaCentavos: bruto.taxaCentavos,
+    taxaPercentual: typeof bruto.taxaPercentual === "string" ? bruto.taxaPercentual : "0",
+    recebimentoCentavos: typeof bruto.recebimentoCentavos === "number" ? bruto.recebimentoCentavos : 0,
+    recebimentoPercentual: typeof bruto.recebimentoPercentual === "string" ? bruto.recebimentoPercentual : "0",
+    envioGratisMes: typeof bruto.envioGratisMes === "number" ? bruto.envioGratisMes : undefined,
+    recebimentoGratisMes: typeof bruto.recebimentoGratisMes === "number" ? bruto.recebimentoGratisMes : undefined,
+    em: typeof bruto.em === "string" ? bruto.em : undefined,
+  };
+}
+
+function linhasTaxasGateway(gateway: (TaxasPsp & { em?: string }) | undefined): string[] {
+  if (gateway === undefined) return [];
+  const quando = gateway.em !== undefined ? ` · ${formatarQuando(gateway.em)}` : "";
+  const envioGratis =
+    gateway.envioGratisMes !== undefined && gateway.envioGratisMes > 0 ? ` · ${gateway.envioGratisMes} envios isentos/mês` : "";
+  return [
+    `Tarifa ${gateway.origem} envio: R$ ${reaisDe(gateway.taxaCentavos)}${envioGratis}`,
+    `Tarifa ${gateway.origem} recebimento: R$ ${reaisDe(gateway.recebimentoCentavos)} + ${gateway.recebimentoPercentual}%${quando}`,
+  ];
+}
+
+function avisoTaxasGateway(taxas: TaxasPsp): string {
+  return `Tarifas ${taxas.origem}: envio PIX R$ ${reaisDe(taxas.taxaCentavos)}. Recebimento R$ ${reaisDe(taxas.recebimentoCentavos)}.`;
 }
 
 function tipoCredito(tipo: string): boolean {

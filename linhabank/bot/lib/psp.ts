@@ -1,4 +1,11 @@
-import { asaasConfigurado, cobrancaAsaas, enviarPixAsaas, rotuloAsaas } from "./asaas.js";
+import {
+  asaasConfigurado,
+  cobrancaAsaas,
+  consultarTaxasAsaas,
+  enviarPixAsaas,
+  rotuloAsaas,
+  type TaxasPsp,
+} from "./asaas.js";
 import { chaveRecebimento, montarCopiaECola } from "./brcode.js";
 import { configAtual } from "./config.js";
 import { enviarPixGateway, gatewayHttpConfigurada, type RespostaEnvio } from "./gateway.js";
@@ -98,4 +105,15 @@ export function rotuloLiquidacao(): string {
   if (psp.nome === "asaas") return rotuloAsaas();
   if (psp.nome === "http") return "convênio ativo";
   return "convênio não contratado";
+}
+
+export type { TaxasPsp };
+
+export async function consultarTaxasGateway(): Promise<TaxasPsp | undefined> {
+  if (pspAtual().nome !== "asaas") return undefined;
+  try {
+    return await consultarTaxasAsaas();
+  } catch {
+    return undefined;
+  }
 }
