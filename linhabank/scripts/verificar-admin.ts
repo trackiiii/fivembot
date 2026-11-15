@@ -234,14 +234,20 @@ function semIa(texto: string): void {
     const kv = kvMemoria();
     await gravarConfig(kv, { chatsAdmin: "1001", taxaCentavos: 150, taxaPercentual: "1,50" });
     const atualizado = await aplicarAcao(kv, "1001", "a:r");
-    assert(configAtual().taxaCentavos === 200, `tarifa da gateway ${configAtual().taxaCentavos}`);
-    assert(configAtual().taxaPercentual === "0", `percentual da gateway ${configAtual().taxaPercentual}`);
-    assert((atualizado.aviso ?? "").includes("envio PIX R$ 2,00"), `aviso atualizar: ${atualizado.aviso}`);
+    assert(configAtual().taxaGatewayCentavos === 200, `custo da gateway ${configAtual().taxaGatewayCentavos}`);
+    assert(configAtual().taxaCentavos === 150, "atualizar apagou o adicional");
+    assert(configAtual().taxaPercentual === "1,50", "atualizar apagou o adicional percentual");
+    assert((atualizado.aviso ?? "").includes("Adicional LinhaBank inalterado"), `aviso atualizar: ${atualizado.aviso}`);
     await aplicarAcao(kv, "1001", "a:g");
     const tarifas = await montarTela(kv, "1001");
-    assert(tarifas.texto.includes("envio: R$ 2,00"), "tarifas sem a tarifa de envio da gateway");
+    assert(tarifas.texto.includes("Custo da gateway (envio): R$ 2,00"), "tarifas sem o custo da gateway");
+    assert(tarifas.texto.includes("Adicional LinhaBank: R$ 1,50 + 1,50%"), "tarifas sem o adicional");
     assert(tarifas.texto.includes("recebimento: R$ 0,99"), "tarifas sem a tarifa de recebimento da gateway");
-    assert(taxaPixExternoCentavos(10_000) === 200, "tarifa da gateway não entrou no PIX externo");
+    assert(taxaPixExternoCentavos(10_000) === 500, `PIX externo sem soma gateway+adicional: ${taxaPixExternoCentavos(10_000)}`);
+    await aplicarAcao(kv, "1001", "a:k:f");
+    await aplicarTextoAdmin(kv, "1001", "50");
+    assert(configAtual().taxaCentavos === 50 && configAtual().taxaGatewayCentavos === 200, "adicional não ficou personalizável");
+    assert(taxaPixExternoCentavos(10_000) === 400, "adicional novo não entrou no PIX externo");
   } finally {
     globalThis.fetch = originalFetch;
     if (gatewayUrl === undefined) delete process.env.PIX_GATEWAY_URL;

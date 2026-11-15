@@ -9,12 +9,12 @@ Este projeto **não está em produção**. O Asaas pode estar ligado para PIX, m
 - Cadastro por `/start` e aceite dos termos, com uma carteira por chat.
 - Saldo e extrato da própria conta.
 - PIX entre contas LinhaBank, reconhecido pela chave `lb…@linhabank` ou pelo número, sem taxa.
-- PIX para fora pelo Asaas quando `ASAAS_API_KEY` existe (`POST /v3/transfers`). Sem Asaas, vale o convênio HTTP `PIX_GATEWAY_URL` + `PIX_GATEWAY_TOKEN`. A taxa é `PIX_TAXA_CENTAVOS` + `PIX_TAXA_PERCENTUAL` (zero se não configurada). PIX interno LinhaBank continua isento.
+- PIX para fora pelo Asaas quando `ASAAS_API_KEY` existe (`POST /v3/transfers`). Sem Asaas, vale o convênio HTTP `PIX_GATEWAY_URL` + `PIX_GATEWAY_TOKEN`. O cliente paga o custo da gateway mais o adicional LinhaBank (`PIX_TAXA_CENTAVOS` + `PIX_TAXA_PERCENTUAL`, zero se não configurado). PIX interno LinhaBank continua isento.
 - Depósito PIX com QR Code e copia e cola. Com Asaas, o QR é estático (`POST /v3/pix/qrCodes/static`). O saldo **não** sobe na geração. Sobe só no webhook `PAYMENT_RECEIVED`, ou no simulador de homologação.
 - Histórico no ledger (lançamentos não são apagados). Comprovante `LB-…` em cada movimentação.
 - Transferência, boleto, cartão virtual, PIX agendado e protocolo.
 - Gerência no Telegram: `/admin` abre o painel operacional (custódia, contas, ficha, extrato, tesouraria PIX, movimento e tarifas). Bloqueio de conta e cartão, liquidação em homologação, cancelamento de cobrança e parametrização. Sem página web.
-- **Atualizar** no painel consulta as tarifas vigentes da gateway. Com Asaas, `GET /v3/myAccount/fees/` preenche a tarifa de PIX externo (envio) e mostra o recebimento. PIX interno continua isento. Convênio HTTP não informa tarifas.
+- **Atualizar** no painel consulta o custo vigente da gateway (`GET /v3/myAccount/fees/` no Asaas) e não altera o adicional LinhaBank. Em Tarifas, **Adicional R$** e **Adicional %** personalizam a margem em cima da gateway. PIX interno continua isento. Convênio HTTP não informa o custo da gateway.
 - Cada depósito, envio e recebimento de qualquer cliente é publicado no canal de movimento do Telegram (`LINHABANK_CANAL_MOVIMENTO` ou, se vazio, nos chats dos operadores). Sem copia e cola e sem a Thialinha.
 - Foto de comprovante **não** credita saldo.
 - A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo. Sem teclado extra no chat.
@@ -57,8 +57,9 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | `PIX_GATEWAY_TOKEN` | Token do convênio HTTP genérico |
 | `PIX_GATEWAY_WEBHOOK_SECRET` | Segredo do aviso genérico de PIX recebido |
 | `PIX_RECEBIMENTO_CHAVE` | Chave Pix da conta Asaas que recebe depósito. Sem isso, o bot lista as chaves ativas |
-| `PIX_TAXA_CENTAVOS` | Taxa fixa do PIX para fora |
-| `PIX_TAXA_PERCENTUAL` | Percentual do PIX para fora |
+| `PIX_TAXA_CENTAVOS` | Adicional fixo do LinhaBank sobre o custo da gateway, no PIX para fora |
+| `PIX_TAXA_PERCENTUAL` | Adicional percentual do LinhaBank sobre o custo da gateway, no PIX para fora |
+| `PIX_TAXA_GATEWAY_CENTAVOS` | Custo de envio da gateway, em centavos. O painel **Atualizar** preenche pelo Asaas |
 | `LINHABANK_MODO` | `sandbox` (padrão) ou `live` |
 | `ADMIN_TOKEN` | Token para o primeiro `/admin` no Telegram |
 | `LINHABANK_ADMIN_CHATS` | IDs extras dos chats admin. O chat `7069054484` já entra como admin |
@@ -73,7 +74,7 @@ Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia)
 - Telegram: `POST /v1/channels/telegram/webhook`
 - PIX recebido (Asaas): `POST /v1/channels/pix/asaas` com `asaas-access-token: $ASAAS_WEBHOOK_TOKEN`. Evento `PAYMENT_RECEIVED`.
 - PIX recebido (convênio HTTP): `POST /v1/channels/pix/recebido` com `X-Linhabank-Gateway-Token`
-- Gerência: no Telegram, `/admin` (chat `7069054484`, `LINHABANK_ADMIN_CHATS` ou `/admin` + `ADMIN_TOKEN`). Painel, contas, ficha, extrato, PIX e tarifas. O canal de movimento também se configura em Tarifas → Canal TG. **Atualizar** puxa as tarifas Asaas vigentes.
+- Gerência: no Telegram, `/admin` (chat `7069054484`, `LINHABANK_ADMIN_CHATS` ou `/admin` + `ADMIN_TOKEN`). Painel, contas, ficha, extrato, PIX e tarifas. O canal de movimento também se configura em Tarifas → Canal TG. **Atualizar** puxa o custo Asaas; **Adicional R$** / **Adicional %** definem a margem.
 - Mini-app: `GET /v1/channels/app/` e `POST /v1/channels/app/api` com `Authorization: tma <initData>`
 - Simular pagamento (só sandbox): `POST /v1/channels/admin/sandbox/pagar` `{ "cobrancaId": "dep-…" }`
 

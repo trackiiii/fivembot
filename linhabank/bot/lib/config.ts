@@ -7,6 +7,7 @@ export type ConfigBot = {
   modo: "sandbox" | "live";
   taxaCentavos: number;
   taxaPercentual: string;
+  taxaGatewayCentavos: number;
   chaveRecebimento: string;
   cidadeRecebimento: string;
   limiteCentavos: number;
@@ -25,6 +26,7 @@ export function defaultsEnv(): ConfigBot {
     modo: process.env.LINHABANK_MODO?.trim() === "live" ? "live" : "sandbox",
     taxaCentavos: inteiroEnv(process.env.PIX_TAXA_CENTAVOS, 0, 500_000),
     taxaPercentual: percentualEnv(process.env.PIX_TAXA_PERCENTUAL),
+    taxaGatewayCentavos: inteiroEnv(process.env.PIX_TAXA_GATEWAY_CENTAVOS, 0, 500_000),
     chaveRecebimento: (process.env.PIX_RECEBIMENTO_CHAVE ?? "").trim(),
     cidadeRecebimento: (process.env.PIX_RECEBIMENTO_CIDADE ?? "SAO PAULO").trim() || "SAO PAULO",
     limiteCentavos: inteiroEnv(process.env.LINHABANK_LIMITE_CENTAVOS, 500_000, 2_000_000) || 500_000,
@@ -86,6 +88,9 @@ function aplicarPedido(base: ConfigBot, pedido: unknown): ConfigBot {
   if (bruto.modo === "sandbox" || bruto.modo === "live") proximo.modo = bruto.modo;
   if (typeof bruto.taxaCentavos === "number" && Number.isSafeInteger(bruto.taxaCentavos)) {
     proximo.taxaCentavos = Math.max(0, Math.min(500_000, bruto.taxaCentavos));
+  }
+  if (typeof bruto.taxaGatewayCentavos === "number" && Number.isSafeInteger(bruto.taxaGatewayCentavos)) {
+    proximo.taxaGatewayCentavos = Math.max(0, Math.min(500_000, bruto.taxaGatewayCentavos));
   }
   if (typeof bruto.taxaPercentual === "string") {
     const limpo = bruto.taxaPercentual.trim();

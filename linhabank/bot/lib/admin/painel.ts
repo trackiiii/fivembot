@@ -18,7 +18,7 @@ import { configAtual, garantirConfig, gravarConfig, unirChatsAdmin } from "../co
 import { consultarTaxasGateway, rotuloLiquidacao, type TaxasPsp } from "../psp.js";
 import { dataHoraBrasil, formatarQuando } from "../horario.js";
 import { ehAdmin, emSandbox } from "../modo.js";
-import { taxaPixExternoCentavos } from "../taxa.js";
+import { detalheTaxaPixExterno, taxaPixExternoCentavos } from "../taxa.js";
 
 export const CHAVE_UI = (chatId: string) => `linhabank:admin:ui:${chatId}`;
 export const CHAVE_PENDENTE = (chatId: string) => `linhabank:admin:pendente:${chatId}`;
@@ -77,8 +77,8 @@ const ROTULO_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   nomeExibido: "nome da instituição",
   chaveRecebimento: "chave PIX de recebimento",
   cidadeRecebimento: "praça da cobrança",
-  taxaCentavos: "tarifa PIX externo, em centavos",
-  taxaPercentual: "tarifa PIX externo, em percentual",
+  taxaCentavos: "adicional LinhaBank sobre a gateway, em centavos",
+  taxaPercentual: "adicional LinhaBank sobre a gateway, em percentual",
   limiteCentavos: "limite por operação, em centavos",
   webappUrl: "endereço HTTPS do canal digital",
   chatsAdmin: "identificadores dos operadores, separados por vírgula",
@@ -89,8 +89,8 @@ const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   nomeExibido: "2 a 32 caracteres.",
   chaveRecebimento: "E-mail, CPF, CNPJ, telefone ou chave aleatória.",
   cidadeRecebimento: "Até 15 letras, sem acento.",
-  taxaCentavos: "Ex.: 99 = R$ 0,99. Transferência entre contas LinhaBank permanece isenta.",
-  taxaPercentual: "Ex.: 1,50. Informe 0 para isentar o percentual.",
+  taxaCentavos: "Ex.: 99 = R$ 0,99 a somar ao custo da gateway. PIX interno permanece isento.",
+  taxaPercentual: "Ex.: 1,50. Soma-se ao custo da gateway no PIX externo. Informe 0 para isentar o adicional percentual.",
   limiteCentavos: "Ex.: 250000 = R$ 2.500,00.",
   webappUrl: "Opcional. Somente HTTPS.",
   chatsAdmin: "Somente números. O operador atual permanece na lista.",
@@ -660,7 +660,7 @@ function telaParametros(
   config: ReturnType<typeof configAtual>,
   gateway?: TaxasPsp & { em?: string },
 ): TelaAdmin {
-  const amostra = taxaPixExternoCentavos(10_000);
+  const amostra = detalheTaxaPixExterno(10_000);
   const texto = [
     "Parametrização operacional",
     "",
@@ -668,8 +668,10 @@ function telaParametros(
     `Liquidação PIX: ${rotuloLiquidacao()}`,
     `Chave de recebimento: ${config.chaveRecebimento || "não informada"}`,
     `Praça: ${config.cidadeRecebimento}`,
-    `Tarifa PIX externo: R$ ${reaisDe(config.taxaCentavos)} + ${config.taxaPercentual}%`,
-    `Exemplo em R$ 100,00: R$ ${reaisDe(amostra)}`,
+    `Custo da gateway (envio): R$ ${reaisDe(config.taxaGatewayCentavos)}`,
+    `Adicional LinhaBank: R$ ${reaisDe(config.taxaCentavos)} + ${config.taxaPercentual}%`,
+    `PIX externo cobrado: R$ ${reaisDe(config.taxaGatewayCentavos + config.taxaCentavos)} + ${config.taxaPercentual}%`,
+    `Exemplo em R$ 100,00: R$ ${reaisDe(amostra.totalCentavos)}`,
     "Tarifa PIX interno: isento",
     ...linhasTaxasGateway(gateway),
     `Limite por operação: R$ ${reaisDe(config.limiteCentavos)}`,
@@ -689,8 +691,8 @@ function telaParametros(
         { text: "Praça", callback_data: "a:k:i" },
       ],
       [
-        { text: "Tarifa R$", callback_data: "a:k:f" },
-        { text: "Tarifa %", callback_data: "a:k:e" },
+        { text: "Adicional R$", callback_data: "a:k:f" },
+        { text: "Adicional %", callback_data: "a:k:e" },
         { text: "Limite", callback_data: "a:k:u" },
       ],
       [
@@ -818,7 +820,7 @@ async function sincronizarTaxasGateway(kv: HostKvApi): Promise<string> {
     if (psp === "convênio ativo") return "Convênio HTTP não informa tarifas. Posição atualizada.";
     return "Posição atualizada.";
   }
-  await gravarConfig(kv, { taxaCentavos: taxas.taxaCentavos, taxaPercentual: taxas.taxaPercentual });
+  await gravarConfig(kv, { taxaGatewayCentavos: taxas.taxaCentavos });
   await kv.put(CHAVE_TAXAS_GATEWAY, {
     origem: taxas.origem,
     taxaCentavos: taxas.taxaCentavos,
@@ -860,7 +862,7 @@ function linhasTaxasGateway(gateway: (TaxasPsp & { em?: string }) | undefined): 
 }
 
 function avisoTaxasGateway(taxas: TaxasPsp): string {
-  return `Tarifas ${taxas.origem}: envio PIX R$ ${reaisDe(taxas.taxaCentavos)}. Recebimento R$ ${reaisDe(taxas.recebimentoCentavos)}.`;
+  return `Custo ${taxas.origem} atualizado: envio R$ ${reaisDe(taxas.taxaCentavos)}. Adicional LinhaBank inalterado.`;
 }
 
 function tipoCredito(tipo: string): boolean {
