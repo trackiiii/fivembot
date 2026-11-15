@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const LIMITE_FALA = 500;
+const MBROLA_BR4 = "/usr/share/mbrola/br4/br4";
 let espeak: string | undefined;
 let ffmpeg: string | undefined;
 let binsChecados = false;
@@ -30,6 +31,17 @@ export function textoParaFala(texto: string): string | undefined {
   return limpo.length > LIMITE_FALA ? `${limpo.slice(0, LIMITE_FALA - 1)}…` : limpo;
 }
 
+export function prepararFala(texto: string): string {
+  return texto
+    .replace(/\bThialinha\b/gi, "Tia linha")
+    .replace(/\bLinhaBank\b/gi, "Linha Bank")
+    .replace(/\bLBcoins\b/gi, "éle bê coins")
+    .replace(/([.!?])(\s+|$)/g, "$1 ... ")
+    .replace(/:\s+/g, ". ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function vozDisponivel(): boolean {
   garantirBins();
   return espeak !== undefined && ffmpeg !== undefined;
@@ -43,13 +55,31 @@ export async function sintetizarVoz(texto: string): Promise<Uint8Array | undefin
   const pasta = await mkdtemp(join(tmpdir(), "linhabank-voz-"));
   const wav = join(pasta, "fala.wav");
   const ogg = join(pasta, "fala.ogg");
+  const perfil = perfilVoz();
   try {
-    const gerou = await rodar(espeak, ["-v", "pt-br+f3", "-s", "148", "-p", "52", "-w", wav, fala], 8000);
+    const gerou = await rodar(espeak, ["-b", "1", ...perfil, "-w", wav, prepararFala(fala)], 12000);
     if (gerou !== 0) return undefined;
     const converteu = await rodar(
       ffmpeg,
-      ["-y", "-i", wav, "-c:a", "libopus", "-b:a", "24k", "-vbr", "on", "-application", "voip", ogg],
-      8000,
+      [
+        "-y",
+        "-i",
+        wav,
+        "-ar",
+        "48000",
+        "-ac",
+        "1",
+        "-c:a",
+        "libopus",
+        "-b:a",
+        "48k",
+        "-vbr",
+        "on",
+        "-application",
+        "audio",
+        ogg,
+      ],
+      12000,
     );
     if (converteu !== 0) return undefined;
     return await readFile(ogg);
@@ -60,11 +90,27 @@ export async function sintetizarVoz(texto: string): Promise<Uint8Array | undefin
   }
 }
 
+function perfilVoz(): string[] {
+  if (arquivoExecutavel(MBROLA_BR4) && comandoExiste("mbrola") !== undefined) {
+    return ["-v", "mb-br4", "-s", "122", "-g", "10", "-p", "48", "-a", "140"];
+  }
+  return ["-v", "pt-br", "-s", "108", "-g", "16", "-p", "42", "-a", "140"];
+}
+
 function garantirBins(): void {
   if (binsChecados) return;
   binsChecados = true;
   espeak = comandoExiste("espeak-ng") ?? comandoExiste("espeak");
   ffmpeg = comandoExiste("ffmpeg");
+}
+
+function arquivoExecutavel(caminho: string): boolean {
+  try {
+    accessSync(caminho, constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function comandoExiste(nome: string): string | undefined {

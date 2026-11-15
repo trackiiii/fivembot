@@ -1,4 +1,4 @@
-import { sintetizarVoz, textoParaFala, vozDisponivel } from "../bot/lib/voz.js";
+import { prepararFala, sintetizarVoz, textoParaFala, vozDisponivel } from "../bot/lib/voz.js";
 
 function assert(condicao: boolean, mensagem: string): void {
   if (!condicao) throw new Error(mensagem);
@@ -11,11 +11,12 @@ function assert(condicao: boolean, mensagem: string): void {
   assert(textoParaFala("00020126580014br.gov.bcb.pix") === undefined, "BR Code foi falado");
   assert(textoParaFala("a") === undefined, "letra solta foi falada");
   assert(textoParaFala("Veja https://linhabank.test/x agora") === "Veja agora", "URL ficou na fala");
+  assert(prepararFala("Oi, Thialinha. Saldo no LinhaBank.") === "Oi, Tia linha. ... Saldo no Linha Bank. ...", "pausas da fala");
 }
 
 if (vozDisponivel()) {
   const audio = await sintetizarVoz("Oi, eu sou a Thialinha. Te atendo no LinhaBank.");
-  assert(audio !== undefined && audio.length > 200, "síntese de voz vazia");
+  assert(audio !== undefined && audio.length > 4000, "síntese de voz curta demais");
   assert(audio![0] === 0x4f && audio![1] === 0x67 && audio![2] === 0x67 && audio![3] === 0x53, "áudio não é Ogg");
 }
 
