@@ -3,7 +3,8 @@ import { defineChannel, localDevStrict, POST, sharedSecretAuth } from "@grok/age
 import type { ChannelStartArgs } from "@grok/agent-sdk";
 import * as z from "zod/v4";
 
-import { aceitarTermos, decidirTermos, lerConta, TEXTO_RECUSA } from "../lib/banco.js";
+import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } from "../lib/banco.js";
+import { RESPOSTA_AJUDA, respostaContaAberta } from "../lib/respostas.js";
 import {
   type Atualizacao,
   type EstadoTelegram,
@@ -126,7 +127,11 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     }
     const jaTinha = (await lerConta(deps.kv, atualizacao.chatId)) !== undefined;
     await aceitarTermos(deps.kv, atualizacao.chatId, atualizacao.nome);
-    await falar(deps, atualizacao, "CONCORDO", !jaTinha);
+    if (jaTinha) {
+      await enviarPadrao(deps.kv, atualizacao, RESPOSTA_AJUDA);
+      return;
+    }
+    await enviarPadrao(deps.kv, atualizacao, await textoContaAberta(deps.kv, atualizacao));
     return;
   }
 
@@ -140,9 +145,34 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     await enviarTexto(atualizacao.chatId, TEXTO_RECUSA, atualizacao.mensagemId);
     return;
   }
+  if (existente !== undefined && decisao === "pedir") {
+    await enviarPadrao(deps.kv, atualizacao, RESPOSTA_AJUDA);
+    return;
+  }
   const abriuAgora = existente === undefined && decisao === "concordo";
-  if (abriuAgora) await aceitarTermos(deps.kv, atualizacao.chatId, atualizacao.nome);
-  await falar(deps, atualizacao, atualizacao.texto, abriuAgora);
+  if (abriuAgora) {
+    await aceitarTermos(deps.kv, atualizacao.chatId, atualizacao.nome);
+    await enviarPadrao(deps.kv, atualizacao, await textoContaAberta(deps.kv, atualizacao));
+    return;
+  }
+  await falar(deps, atualizacao, atualizacao.texto, false);
+}
+
+async function textoContaAberta(kv: HostKvApi, atualizacao: MensagemRecebida): Promise<string> {
+  const resumo = await operarConta(kv, atualizacao.chatId, `abertura:${atualizacao.updateId}`, { acao: "resumo" });
+  if (resumo.ok !== true || resumo.conta === undefined || resumo.saldo === undefined) return RESPOSTA_AJUDA;
+  return respostaContaAberta({
+    agencia: resumo.conta.agencia,
+    numero: resumo.conta.numero,
+    chave: resumo.conta.chaveTransferencia,
+    saldo: resumo.saldo,
+  });
+}
+
+async function enviarPadrao(kv: HostKvApi, atualizacao: MensagemRecebida, texto: string): Promise<void> {
+  const ok = await enviarTexto(atualizacao.chatId, texto, atualizacao.mensagemId);
+  if (!ok) return;
+  await registrarTroca(kv, atualizacao.chatId, atualizacao.nome, atualizacao.tipo === "texto" ? atualizacao.texto : "CONCORDO", texto, "padrao");
 }
 
 async function falar(

@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
 import { enviarPixGateway, gatewayConfigurada } from "./gateway.js";
+import { respostaPixRecebido } from "./respostas.js";
 
 export const TERMOS_VERSAO = "2026-11-15-2";
 export const AGENCIA = "0001";
@@ -507,10 +508,13 @@ export async function creditarPixRecebido(
   lancar(destino, "pix_recebido", aviso.valorCentavos, origem);
   await gravarConta(kv, destino);
   await kv.put(marca, true);
-  const comprovante = aviso.endToEndId === undefined ? "" : ` Comprovante ${aviso.endToEndId.slice(0, 40)}.`;
   return {
     estado: "novo",
     chatId: destino.chatId,
-    texto: `Entrou um PIX de ${reaisDe(aviso.valorCentavos)} na sua conta. Seu saldo agora é ${reaisDe(destino.saldoCentavos)}.${comprovante} Quer ver o extrato?`,
+    texto: respostaPixRecebido({
+      valor: reaisDe(aviso.valorCentavos),
+      saldo: reaisDe(destino.saldoCentavos),
+      comprovante: aviso.endToEndId?.slice(0, 40),
+    }),
   };
 }
