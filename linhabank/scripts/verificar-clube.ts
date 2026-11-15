@@ -259,6 +259,8 @@ assert(categoriaDeXp(5000) === "ouro", "faixa ouro");
   assert(local.tipo === "texto" && local.categoria === "clube", "Thialinha não consultou o Club");
   if (local.tipo !== "texto") throw new Error("Thialinha não consultou o Club");
   assert(local.texto.includes("42"), "fala sem o saldo real");
+  assert(!/t\.me\//.test(local.texto), "saldo de LBcoins misturou o convite");
+  assert(!/categoria|XP/i.test(local.texto), "saldo de LBcoins misturou categoria");
   const semConta = await responderLocal(kv, "81", "quantos lbcoins eu tenho?", "Nico", false, false, "clu2");
   assert(semConta.tipo === "texto" && semConta.categoria === "cadastro", "Club sem conta");
   if (semConta.tipo !== "texto") throw new Error("Club sem conta");

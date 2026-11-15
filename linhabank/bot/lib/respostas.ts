@@ -1,7 +1,7 @@
 import { dataHoraBrasil } from "./horario.js";
 
 export const RESPOSTA_AJUDA =
-  "Tô aqui com a sua conta. Posso ver saldo e extrato, gerar um PIX pra você receber, mandar um PIX, agendar um envio, transferir entre contas LinhaBank, pagar boleto, bloquear o cartão virtual ou abrir o LINHABANK CLUB. Me diz o que a gente faz agora.";
+  "Tô aqui. Posso ver o saldo, gerar um PIX pra receber, mandar um, agendar um envio ou abrir o Club. Me fala o que você precisa.";
 
 export type ItemExtrato = {
   em: string;
@@ -42,7 +42,7 @@ export function respostaStartComConta(dados: {
   const nome = pedaco.length >= 2 && pedaco.toLowerCase() !== "cliente" ? pedaco.slice(0, 24) : undefined;
   const oi = nome === undefined ? "Oi. Tô aqui." : `Oi, ${nome}. Tô aqui.`;
   if (dados.movimentos.length === 0) {
-    return `${oi} Seu saldo é R$ ${dados.saldo}. Hoje ainda não teve movimentação. O que a gente resolve?`;
+    return `${oi} Seu saldo é R$ ${dados.saldo}. Hoje ainda não teve movimentação. Quer mandar um PIX ou era só conferir?`;
   }
   const limite = dados.movimentos.slice(-8);
   const linhas = limite.map((item) => {
@@ -82,11 +82,11 @@ export function respostaContaAberta(dados: {
   chave: string;
   saldo: string;
 }): string {
-  return `Conta aberta, bem-vindo. Agência ${dados.agencia}, conta ${dados.numero}, chave de transferência ${dados.chave}. Saldo: R$ ${dados.saldo}. Quer ver o extrato, mandar um PIX ou receber um?`;
+  return `Conta aberta.\n\nAgência ${dados.agencia}\nConta ${dados.numero}\nChave ${dados.chave}\n\nSaldo: R$ ${dados.saldo}. Quer receber um PIX pra começar?`;
 }
 
 export function respostaSaldo(saldo: string): string {
-  return `Seu saldo é R$ ${saldo}. Quer ver o extrato, ou já sabe o que vai fazer?`;
+  return `Seu saldo é R$ ${saldo}. Era só conferir, ou a gente manda um PIX?`;
 }
 
 export function respostaPixEnviado(dados: {

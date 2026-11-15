@@ -8,7 +8,7 @@ function entrada(mensagem: string): string {
       historico: [
         {
           papel: "thialinha",
-          texto: "Oi, Ana. Sou a Thialinha, atendente IA do LinhaBank. Em que posso ajudar?",
+          texto: "Oi, Ana. Thialinha aqui, do LinhaBank. O que você precisa?",
         },
       ],
       protocolos: [],

@@ -77,7 +77,7 @@ export async function responderLocal(
   if (falaPrecisaClube(categoria) && temConta) {
     const clube = await consultarClube(kv, chatId);
     if (clube === undefined) categoria = "cadastro";
-    else preencherClube(slots, clube);
+    else preencherClube(slots, clube, texto);
   }
 
   const fala = escolherFala(falasDa(categoria), estado, slots);
@@ -115,8 +115,8 @@ async function preencherFinanceiro(
       } else {
         slots.extrato = filtrado
           .slice(-6)
-          .map((item) => `${item.tipo} R$ ${item.valor} ${item.descricao}`)
-          .join("; ");
+          .map((item) => `${rotuloTipo(item.tipo)} · R$ ${item.valor}`)
+          .join("\n");
       }
     }
     return { ok: true };
@@ -129,7 +129,7 @@ async function preencherFinanceiro(
     slots.pendencias =
       abertas.length === 0
         ? "Nenhuma cobrança aberta agora."
-        : abertas.map((item) => `R$ ${reaisDe(item.valorCentavos)} (${item.id})`).join("; ");
+        : abertas.map((item) => `R$ ${reaisDe(item.valorCentavos)} em aberto`).join("\n");
     return { ok: true };
   }
   return { ok: true };
@@ -139,17 +139,61 @@ function falaPrecisaClube(categoria: Categoria): boolean {
   return categoria === "clube";
 }
 
-function preencherClube(slots: Slots, clube: NonNullable<Awaited<ReturnType<typeof consultarClube>>>): void {
-  const ouro = configAtual().xpOuro;
-  slots.lbcoins = String(clube.saldo);
+function recorteClube(textoBruto: string): "saldo" | "categoria" | "indicar" | "indicacoes" | "beneficios" {
+  const t = textoBruto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (/(benefici|vantagem|o que eu ganho|o que tenho direito)/.test(t)) return "beneficios";
+  if (/(indiquei|indicacoes|indicacao aprov|quantas pessoas|ganhei indicando|ganho indicando)/.test(t)) {
+    return "indicacoes";
+  }
+  if (/(codigo|convite|link|indicar|indique|como ganhar)/.test(t)) return "indicar";
+  if (/(categoria|ouro|prata|bronze|\bxp\b|chegar)/.test(t)) return "categoria";
+  return "saldo";
+}
+
+function preencherClube(
+  slots: Slots,
+  clube: NonNullable<Awaited<ReturnType<typeof consultarClube>>>,
+  textoPedido: string,
+): void {
+  const recorte = recorteClube(textoPedido);
+  if (recorte === "saldo") {
+    slots.lbcoins = String(clube.saldo);
+    slots.ganho = String(clube.ganhoIndicacao);
+    return;
+  }
+  if (recorte === "categoria") {
+    slots.categoria = rotuloCategoria(clube.categoria);
+    slots.xp = String(clube.xp);
+    slots.faltaOuro = String(Math.max(0, configAtual().xpOuro - clube.xp));
+    return;
+  }
+  if (recorte === "indicar") {
+    slots.codigo = clube.codigo;
+    slots.link = clube.link;
+    return;
+  }
+  if (recorte === "indicacoes") {
+    slots.indicadas = String(clube.indicadas);
+    slots.aprovadas = String(clube.aprovadas);
+    slots.pendentes = String(clube.pendentes);
+    slots.ganho = String(clube.ganhoIndicacao);
+    return;
+  }
   slots.categoria = rotuloCategoria(clube.categoria);
-  slots.xp = String(clube.xp);
-  slots.faltaOuro = String(Math.max(0, ouro - clube.xp));
-  slots.codigo = clube.codigo;
-  slots.link = clube.link;
-  slots.indicadas = String(clube.indicadas);
-  slots.aprovadas = String(clube.aprovadas);
-  slots.pendentes = String(clube.pendentes);
-  slots.ganho = String(clube.ganhoIndicacao);
-  slots.beneficios = clube.beneficios.join(" ");
+  slots.beneficios = clube.beneficios.map((item, i) => `${i + 1}. ${item}`).join("\n");
+}
+
+function rotuloTipo(tipo: string): string {
+  if (tipo === "pix_enviado") return "PIX enviado";
+  if (tipo === "pix_recebido") return "PIX recebido";
+  if (tipo === "deposito") return "depósito";
+  if (tipo === "boleto") return "boleto";
+  if (tipo === "transferencia_enviada") return "transferência enviada";
+  if (tipo === "transferencia_recebida") return "transferência recebida";
+  if (tipo === "taxa") return "taxa";
+  if (tipo === "estorno") return "estorno";
+  return tipo;
 }

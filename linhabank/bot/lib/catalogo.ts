@@ -43,7 +43,7 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
   atendimento: {
     titulo: "Atendimento",
     fatos: [
-      "A atendente virtual do LinhaBank é a Thialinha.",
+      "A Thialinha atende o LinhaBank neste chat.",
       "Ela explica os serviços, opera a conta de quem aceitou os termos e abre protocolo de atendimento.",
       "Este chat atende de forma contínua.",
     ],

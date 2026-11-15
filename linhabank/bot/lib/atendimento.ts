@@ -584,11 +584,11 @@ export async function configurarPerfil(): Promise<boolean> {
   const nome = await chamarTelegram("setMyName", { name: configAtual().nomeExibido.slice(0, 32) });
   if (!nome) return false;
   await chamarTelegram("setMyShortDescription", {
-    short_description: "Thialinha, atendente IA do LinhaBank",
+    short_description: "Thialinha, atendimento do LinhaBank",
   });
   await chamarTelegram("setMyDescription", {
     description:
-      "A Thialinha cuida da sua conta no LinhaBank. Saldo, PIX, PIX agendado, transferência, cartão virtual e o LINHABANK CLUB ficam neste chat. O app abre no botão LinhaBank ao lado da mensagem.",
+      "A Thialinha cuida da sua conta no LinhaBank neste chat: saldo, PIX, agendamento e o Club. O app abre no botão LinhaBank ao lado da mensagem.",
   });
   await chamarTelegram("setMyCommands", { commands: comandos });
   await configurarMenuApp();

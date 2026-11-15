@@ -59,6 +59,7 @@ assert(classificarTexto("qual é minha categoria?").categoria === "clube", "cate
   assert(a.categoria === "apresentacao", "histórico vazio não apresentou");
   assert(a.falaId !== b.falaId, "repetiu a fala seguida");
   assert(a.texto.includes("Ana") || a.texto.includes("Thialinha"), "apresentação sem nome ou identidade");
+  assert(!/\bIA\b|rob[oô]|inteligência artificial|assistente virtual/i.test(a.texto), "apresentação soou a robô");
 }
 
 {
@@ -115,6 +116,7 @@ assert(classificarTexto("qual é minha categoria?").categoria === "clube", "cate
   assert(clube.tipo === "texto" && clube.categoria === "clube", "Club com conta não usou biblioteca");
   if (clube.tipo !== "texto") throw new Error("Club com conta não usou biblioteca");
   assert(/\b0\b/.test(clube.texto) && /lbcoins/i.test(clube.texto), "Club sem saldo real");
+  assert(!/t\.me\//.test(clube.texto), "saldo de LBcoins veio com o convite inteiro");
 }
 
 console.log(`conversa ok (${contagem.total} falas)`);

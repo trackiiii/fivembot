@@ -1,6 +1,6 @@
 # LINHABANK
 
-Carteira digital em BRL, com atendimento público no Telegram pelo bot [@linhabank_bot](https://t.me/linhabank_bot). A Thialinha é a atendente IA. O dinheiro da conta não vive no modelo: saldo, ledger e PIX passam pelas ferramentas do servidor.
+Carteira digital em BRL, com atendimento público no Telegram pelo bot [@linhabank_bot](https://t.me/linhabank_bot). A Thialinha atende neste chat. O dinheiro da conta não vive no modelo: saldo, ledger e PIX passam pelas ferramentas do servidor.
 
 Este projeto **não está em produção**. O Asaas pode estar ligado para PIX, mas segurança, KYC e estrutura regulatória ainda precisam estar prontos. O modo padrão da carteira continua `sandbox` (homologação). Não trate homologação como produção.
 
