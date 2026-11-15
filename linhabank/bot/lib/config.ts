@@ -14,6 +14,7 @@ export type ConfigBot = {
   prefixoThialinha: boolean;
   botaoMiniApp: boolean;
   chatsAdmin: string;
+  canalMovimento: string;
   nomeExibido: string;
 };
 
@@ -31,6 +32,7 @@ export function defaultsEnv(): ConfigBot {
     prefixoThialinha: process.env.LINHABANK_PREFIXO_THIALINHA?.trim() !== "0",
     botaoMiniApp: process.env.LINHABANK_BOTAO_APP?.trim() !== "0",
     chatsAdmin: (process.env.LINHABANK_ADMIN_CHATS ?? "").trim(),
+    canalMovimento: (process.env.LINHABANK_CANAL_MOVIMENTO ?? "").trim(),
     nomeExibido: (process.env.LINHABANK_NOME ?? "LinhaBank").trim() || "LinhaBank",
   };
 }
@@ -112,6 +114,10 @@ function aplicarPedido(base: ConfigBot, pedido: unknown): ConfigBot {
       .slice(0, 20)
       .join(",");
   }
+  if (typeof bruto.canalMovimento === "string") {
+    const canal = bruto.canalMovimento.trim();
+    if (canal.length === 0 || idCanalMovimento(canal)) proximo.canalMovimento = canal;
+  }
   if (typeof bruto.nomeExibido === "string") {
     const nome = bruto.nomeExibido.trim().slice(0, 32);
     if (nome.length >= 2) proximo.nomeExibido = nome;
@@ -130,6 +136,10 @@ function inteiroEnv(bruto: string | undefined, padrao: number, max: number): num
   const valor = Number(texto);
   if (!Number.isSafeInteger(valor) || valor < 0 || valor > max) return padrao;
   return valor;
+}
+
+function idCanalMovimento(id: string): boolean {
+  return /^-?\d{5,20}$/.test(id) || /^@[A-Za-z0-9_]{5,32}$/.test(id);
 }
 
 function percentualEnv(bruto: string | undefined): string {

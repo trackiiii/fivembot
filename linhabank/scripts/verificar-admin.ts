@@ -1,5 +1,6 @@
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
+process.env.LINHABANK_SILENCIO_CANAL = "1";
 process.env.LINHABANK_MODO = "sandbox";
 process.env.ADMIN_TOKEN = "token-admin-teste";
 delete process.env.PIX_TAXA_CENTAVOS;
@@ -54,12 +55,13 @@ function semIa(texto: string): void {
   assert(lerComandoAdmin("saldo") === undefined, "saldo não é /admin");
   assert(parseAcao("a:g")?.tipo === "aba", "botão Tarifas");
   assert(parseAcao("a:k:f")?.tipo === "pedir", "botão tarifa");
+  assert((parseAcao("a:k:m") as { campo?: string }).campo === "canalMovimento", "botão canal de movimento");
   assert(parseAcao("a:b:0")?.tipo === "bloquear", "botão bloquear");
   assert(parseAcao("a:d:0")?.tipo === "aba", "botão ficha");
   assert(parseAcao("a:j:0")?.tipo === "cartao", "botão cartão");
   assert(parseAcao("a:y:1")?.tipo === "cancelar_pix", "botão cancelar PIX");
   assert((parseAcao("a:x:2") as { indice?: number }).indice === 2, "índice liquidar PIX");
-  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q"];
+  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m"];
   for (const dados of todos) {
     assert(parseAcao(dados) !== undefined, `callback ${dados}`);
     assert(dados.length <= 64, `callback longo ${dados}`);
@@ -118,6 +120,12 @@ function semIa(texto: string): void {
   await aplicarAcao(kv, "1001", "a:k:h");
   await aplicarTextoAdmin(kv, "1001", "admin@linhabank.test");
   assert(configAtual().chaveRecebimento === "admin@linhabank.test", "chave não veio do painel");
+  await aplicarAcao(kv, "1001", "a:k:m");
+  const canalInvalido = await aplicarTextoAdmin(kv, "1001", "abc");
+  assert((canalInvalido?.tela.aviso ?? "").includes("inválido"), "canal inválido passou");
+  const canal = await aplicarTextoAdmin(kv, "1001", "-1001234567890");
+  assert(canal !== undefined && configAtual().canalMovimento === "-1001234567890", "canal de movimento não gravou");
+  assert((canal?.tela.texto ?? "").includes("Canal de movimento: -1001234567890"), "tarifas sem o canal gravado");
   const prefixo = await aplicarAcao(kv, "1001", "a:t:p");
   assert(configAtual().prefixoThialinha === false, "identificação no atendimento não desligou");
   assert(prefixo.tela.texto.includes("Parametrização"), "depois do toggle não voltou à parametrização");

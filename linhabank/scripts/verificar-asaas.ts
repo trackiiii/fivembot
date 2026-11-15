@@ -1,5 +1,6 @@
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
+process.env.LINHABANK_SILENCIO_CANAL = "1";
 process.env.ASAAS_API_KEY = "$aact_prod_linhabank_test_key_00000000";
 process.env.PIX_RECEBIMENTO_CHAVE = "b6295ee1-f054-47d1-9e90-ee57b74f60d9";
 process.env.LINHABANK_MODO = "live";

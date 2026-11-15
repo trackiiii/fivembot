@@ -13,6 +13,7 @@ import {
   reaisDe,
   type ContaPainel,
 } from "../banco.js";
+import { idCanalValido } from "../canal.js";
 import { configAtual, garantirConfig, gravarConfig, unirChatsAdmin } from "../config.js";
 import { rotuloLiquidacao } from "../psp.js";
 import { dataHoraBrasil, formatarQuando } from "../horario.js";
@@ -32,6 +33,7 @@ export type CampoPendente =
   | "limiteCentavos"
   | "webappUrl"
   | "chatsAdmin"
+  | "canalMovimento"
   | "busca";
 
 export type BotaoAdmin = { text: string; callback_data: string };
@@ -67,6 +69,7 @@ const CAMPOS: Record<string, Exclude<CampoPendente, "busca">> = {
   u: "limiteCentavos",
   w: "webappUrl",
   s: "chatsAdmin",
+  m: "canalMovimento",
 };
 
 const ROTULO_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
@@ -78,6 +81,7 @@ const ROTULO_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   limiteCentavos: "limite por operação, em centavos",
   webappUrl: "endereço HTTPS do canal digital",
   chatsAdmin: "identificadores dos operadores, separados por vírgula",
+  canalMovimento: "identificador do canal de movimento no Telegram",
 };
 
 const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
@@ -89,6 +93,7 @@ const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   limiteCentavos: "Ex.: 250000 = R$ 2.500,00.",
   webappUrl: "Opcional. Somente HTTPS.",
   chatsAdmin: "Somente números. O operador atual permanece na lista.",
+  canalMovimento: "Chat id do canal (ex.: -1001234567890) ou @usuario. Envie - para voltar aos operadores.",
 };
 
 const ROTULO_MOVIMENTO: Record<string, string> = {
@@ -337,7 +342,7 @@ export function parseAcao(dados: string):
     const nome = letra === "c" ? "contas" : letra === "p" ? "pix" : "ledger";
     return { tipo: "aba", aba: nome, pagina };
   }
-  const pedir = dados.match(/^a:k:([nhifeuws])$/);
+  const pedir = dados.match(/^a:k:([nhifeuwsm])$/);
   if (pedir !== null) {
     const campo = CAMPOS[pedir[1]];
     if (campo === undefined) return undefined;
@@ -405,6 +410,13 @@ function pedidoDoTexto(campo: Exclude<CampoPendente, "busca">, texto: string, ch
     if (!ids.includes(chatId)) ids.push(chatId);
     return { chatsAdmin: unirChatsAdmin(ids.join(","), chatId) };
   }
+  if (campo === "canalMovimento") {
+    if (limpo === "-" || limpo.toLowerCase() === "nao" || limpo.toLowerCase() === "não") {
+      return { canalMovimento: "" };
+    }
+    if (!idCanalValido(limpo)) return undefined;
+    return { canalMovimento: limpo };
+  }
   return { [campo]: limpo };
 }
 
@@ -440,6 +452,7 @@ function telaResumo(
     `PIX em aberto: ${abertas.length} · R$ ${reaisDe(somaAbertas(painel))}`,
     `Movimento de hoje: + R$ ${reaisDe(volume.credito)}  − R$ ${reaisDe(volume.debito)}`,
     `PIX agendados: ${agendados} · Cartões bloqueados: ${cartoes}`,
+    `Canal de movimento: ${config.canalMovimento || "operadores"}`,
     `Base: ${painel.sql ? "contábil SQL" : "contábil interna"}`,
   ].join("\n");
   return {
@@ -658,6 +671,7 @@ function telaParametros(config: ReturnType<typeof configAtual>): TelaAdmin {
     `Canal digital: ${config.botaoMiniApp ? "ativo" : "inativo"}`,
     `Endereço do canal: ${config.webappUrl || "não informado"}`,
     `Operadores: ${config.chatsAdmin || "—"}`,
+    `Canal de movimento: ${config.canalMovimento || "operadores (padrão)"}`,
   ].join("\n");
   return {
     texto,
@@ -680,6 +694,7 @@ function telaParametros(config: ReturnType<typeof configAtual>): TelaAdmin {
       [
         { text: "Operadores", callback_data: "a:k:s" },
         { text: "Canal digital", callback_data: "a:k:w" },
+        { text: "Canal TG", callback_data: "a:k:m" },
       ],
     ],
   };

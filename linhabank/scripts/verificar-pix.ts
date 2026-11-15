@@ -1,5 +1,6 @@
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
+process.env.LINHABANK_SILENCIO_CANAL = "1";
 process.env.PIX_GATEWAY_URL = "https://pix.example.test";
 process.env.PIX_GATEWAY_TOKEN = "token-de-teste";
 delete process.env.PIX_TAXA_CENTAVOS;

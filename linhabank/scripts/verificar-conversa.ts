@@ -1,5 +1,7 @@
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
+process.env.LINHABANK_SILENCIO_CANAL = "1";
+
 const { contarFalas, CATEGORIAS, classificarTexto, responderLocal } = await import("../bot/lib/conversa/index.js");
 const { aceitarTermos, creditarPixRecebido } = await import("../bot/lib/banco.js");
 

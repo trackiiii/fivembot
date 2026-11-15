@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
 import { chaveQrAsaas } from "./asaas.js";
+import { avisarCanalMovimento } from "./canal.js";
 import { hashPayload, novoTxid } from "./brcode.js";
 import { sqlDisponivel } from "./db.js";
 import { gatewayConfigurada } from "./gateway.js";
@@ -384,6 +385,10 @@ function perfil(conta: Conta): ResultadoOperacao["conta"] {
   };
 }
 
+function resumoCanal(conta: Conta): { nome: string; numero: string; agencia: string } {
+  return { nome: conta.nome, numero: conta.numero, agencia: conta.agencia };
+}
+
 function extratoDe(itens: Movimento[]): ResultadoOperacao["extrato"] {
   return itens.slice(-30).map((item) => ({
     em: item.em,
@@ -684,6 +689,17 @@ async function enviarPix(
   if (typeof taxaReservada?.comprovante === "string") reservaEnviado.comprovante = taxaReservada.comprovante;
   await kv.put(reservaChave, reservaEnviado);
   const atual = (await lerConta(kv, conta.chatId)) ?? conta;
+  const comprovante = typeof reservaEnviado.comprovante === "string" ? reservaEnviado.comprovante : undefined;
+  await avisarCanalMovimento(kv, {
+    id: `pix-out:${idOperacao}`,
+    tipo: "pix_enviado",
+    conta: resumoCanal(atual),
+    valorCentavos: centavos,
+    destino,
+    interno: false,
+    taxaCentavos: taxa,
+    comprovante,
+  });
   return {
     ok: true,
     interno: false,
@@ -692,7 +708,7 @@ async function enviarPix(
     destino,
     saldo: reaisDe(atual.saldoCentavos),
     endToEndId: resposta.endToEndId,
-    comprovante: typeof reserva?.comprovante === "string" ? reserva.comprovante : undefined,
+    comprovante,
     conta: perfil(atual),
   };
 }
@@ -756,6 +772,26 @@ async function liquidarEntreContas(
     return { ok: false, motivo: movimento.motivo, taxa: "0,00", saldo: reaisDe(origem.saldoCentavos), conta: perfil(origem) };
   }
   await kv.put(reservaChave, { status: "enviado", destino: creditada.numero, comprovante: movimento.comprovante });
+  const envio = modo === "pix" ? "pix_enviado" : "transferencia_enviada";
+  const recebimento = modo === "pix" ? "pix_recebido" : "transferencia_recebida";
+  await avisarCanalMovimento(kv, {
+    id: `${modo}-out:${idOperacao}`,
+    tipo: envio,
+    conta: resumoCanal(origem),
+    valorCentavos: centavos,
+    destino: `${creditada.agencia} / ${creditada.numero}  ·  ${creditada.nome}`,
+    interno: true,
+    taxaCentavos: 0,
+    comprovante: movimento.comprovante,
+  });
+  await avisarCanalMovimento(kv, {
+    id: `${modo}-in:${idOperacao}`,
+    tipo: recebimento,
+    conta: resumoCanal(creditada),
+    valorCentavos: centavos,
+    origem: `${origem.agencia} / ${origem.numero}  ·  ${origem.nome}`,
+    comprovante: movimento.comprovante,
+  });
   return {
     ok: true,
     interno: true,
@@ -834,13 +870,22 @@ export async function creditarPixRecebido(
     };
     await salvarCobranca(kv, paga);
     await kv.put(marca, true);
+    const comprovante = movimento.comprovante ?? aviso.endToEndId?.slice(0, 40);
+    await avisarCanalMovimento(kv, {
+      id: `dep-liq:${aviso.id}`,
+      tipo: "deposito_recebido",
+      conta: resumoCanal(atual),
+      valorCentavos: aviso.valorCentavos,
+      comprovante,
+      origem: aviso.pagador?.trim().slice(0, 80),
+    });
     return {
       estado: "novo",
       chatId: atual.chatId,
       texto: respostaPixRecebido({
         valor: reaisDe(aviso.valorCentavos),
         saldo: reaisDe(atual.saldoCentavos),
-        comprovante: movimento.comprovante ?? aviso.endToEndId?.slice(0, 40),
+        comprovante,
       }),
     };
   }
@@ -859,13 +904,22 @@ export async function creditarPixRecebido(
   if (!movimento.ok) return { estado: "conta_ausente" };
   const atual = movimento.contas.find((item) => item.chatId === destino.chatId) ?? destino;
   await kv.put(marca, true);
+  const comprovante = movimento.comprovante ?? aviso.endToEndId?.slice(0, 40);
+  await avisarCanalMovimento(kv, {
+    id: `pix-in:${aviso.id}`,
+    tipo: "pix_recebido",
+    conta: resumoCanal(atual),
+    valorCentavos: aviso.valorCentavos,
+    origem: aviso.pagador?.trim().slice(0, 80),
+    comprovante,
+  });
   return {
     estado: "novo",
     chatId: atual.chatId,
     texto: respostaPixRecebido({
       valor: reaisDe(aviso.valorCentavos),
       saldo: reaisDe(atual.saldoCentavos),
-      comprovante: movimento.comprovante ?? aviso.endToEndId?.slice(0, 40),
+      comprovante,
     }),
   };
 }
@@ -952,6 +1006,13 @@ async function criarDeposito(kv: HostKvApi, conta: Conta, centavos: number, idOp
   };
   await salvarCobranca(kv, cobranca);
   if (gerada.qrId !== undefined) await kv.put(chaveQrAsaas(gerada.qrId), cobranca.id);
+  await avisarCanalMovimento(kv, {
+    id: `dep-gerado:${cobranca.id}`,
+    tipo: "deposito_gerado",
+    conta: resumoCanal(conta),
+    valorCentavos: centavos,
+    cobrancaId: cobranca.id,
+  });
   return {
     ok: true,
     valor: reaisDe(centavos),

@@ -14,6 +14,7 @@ Este projeto **não está em produção**. O Asaas pode estar ligado para PIX, m
 - Histórico no ledger (lançamentos não são apagados). Comprovante `LB-…` em cada movimentação.
 - Transferência, boleto, cartão virtual, PIX agendado e protocolo.
 - Gerência no Telegram: `/admin` abre o painel operacional (custódia, contas, ficha, extrato, tesouraria PIX, movimento e tarifas). Bloqueio de conta e cartão, liquidação em homologação, cancelamento de cobrança e parametrização. Sem página web.
+- Cada depósito, envio e recebimento de qualquer cliente é publicado no canal de movimento do Telegram (`LINHABANK_CANAL_MOVIMENTO` ou, se vazio, nos chats dos operadores). Sem copia e cola e sem a Thialinha.
 - Foto de comprovante **não** credita saldo.
 - A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo. Sem teclado extra no chat.
 - Mini-app do Telegram em `/v1/channels/app/`. Saldo, depósito PIX, envio com confirmação e extrato da mesma conta. O botão nativo **LinhaBank** só aparece com `TELEGRAM_WEBAPP_URL` em HTTPS.
@@ -60,6 +61,7 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | `LINHABANK_MODO` | `sandbox` (padrão) ou `live` |
 | `ADMIN_TOKEN` | Token para o primeiro `/admin` no Telegram |
 | `LINHABANK_ADMIN_CHATS` | IDs extras dos chats admin. O chat `7069054484` já entra como admin |
+| `LINHABANK_CANAL_MOVIMENTO` | Chat id do canal de movimento (ex.: `-100…` ou `@canal`). Sem isso, o feed vai para os operadores. O bot precisa ser admin do canal |
 | `DATABASE_URL` | PostgreSQL. Sem isso, o ledger usa o KV |
 | `LINHABANK_DB_PATH` | PGlite em arquivo, para teste local com SQL |
 
@@ -70,7 +72,7 @@ Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia)
 - Telegram: `POST /v1/channels/telegram/webhook`
 - PIX recebido (Asaas): `POST /v1/channels/pix/asaas` com `asaas-access-token: $ASAAS_WEBHOOK_TOKEN`. Evento `PAYMENT_RECEIVED`.
 - PIX recebido (convênio HTTP): `POST /v1/channels/pix/recebido` com `X-Linhabank-Gateway-Token`
-- Gerência: no Telegram, `/admin` (chat `7069054484`, `LINHABANK_ADMIN_CHATS` ou `/admin` + `ADMIN_TOKEN`). Painel, contas, ficha, extrato, PIX e tarifas.
+- Gerência: no Telegram, `/admin` (chat `7069054484`, `LINHABANK_ADMIN_CHATS` ou `/admin` + `ADMIN_TOKEN`). Painel, contas, ficha, extrato, PIX e tarifas. O canal de movimento também se configura em Tarifas → Canal TG.
 - Mini-app: `GET /v1/channels/app/` e `POST /v1/channels/app/api` com `Authorization: tma <initData>`
 - Simular pagamento (só sandbox): `POST /v1/channels/admin/sandbox/pagar` `{ "cobrancaId": "dep-…" }`
 

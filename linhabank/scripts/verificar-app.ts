@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
+process.env.LINHABANK_SILENCIO_CANAL = "1";
 process.env.TELEGRAM_BOT_TOKEN = "token-mini-app-teste";
 process.env.LINHABANK_MODO = "sandbox";
 process.env.PIX_RECEBIMENTO_CHAVE = "sandbox@linhabank.test";
