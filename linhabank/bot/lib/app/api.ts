@@ -2,7 +2,8 @@ import type { HostKvApi } from "@grok/agent-sdk";
 
 import { operarConta, type PedidoConta, type ResultadoOperacao } from "../banco.js";
 import { enviarTexto, registrarTroca } from "../atendimento.js";
-import { garantirConfig } from "../config.js";
+import { emManutencao, garantirConfig } from "../config.js";
+import { RESPOSTA_MANUTENCAO } from "../respostas.js";
 import { modoCarteira } from "../modo.js";
 import { pngCopiaECola } from "../qr.js";
 
@@ -57,6 +58,9 @@ export async function executarApp(
 ): Promise<RespostaApp> {
   await garantirConfig(kv);
   const modo = modoCarteira();
+  if (emManutencao()) {
+    return { ok: false, modo, motivo: "manutencao", mensagem: RESPOSTA_MANUTENCAO };
+  }
   if (pedido.acao === "enviar" && pedido.confirmar !== true) {
     return { ok: false, modo, motivo: "precisa_confirmar", mensagem: "Confirme o PIX neste app antes de enviar." };
   }

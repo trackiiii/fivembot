@@ -27,6 +27,7 @@ const {
   tentarAbrirAdmin,
 } = await import("../bot/lib/admin/painel.js");
 const { textoClienteAnuncio } = await import("../bot/lib/admin/anuncio.js");
+const { RESPOSTA_MANUTENCAO } = await import("../bot/lib/respostas.js");
 
 function assert(condicao: boolean, mensagem: string): void {
   if (!condicao) throw new Error(mensagem);
@@ -84,7 +85,8 @@ function semIa(texto: string): void {
   assert(parseAcao("a:ia:0")?.tipo === "aprovar_indicacao", "botão aprovar indicação");
   assert(parseAcao("a:ir:0")?.tipo === "rejeitar_indicacao", "botão recusar indicação");
   assert((parseAcao("a:k:l") as { campo?: string }).campo === "lbcoinsIndicacao", "botão LBcoins indicação");
-  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:n", "a:nl", "a:np", "a:ns", "a:ny", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m", "a:h", "a:ic:m", "a:ic:c", "a:k:l", "a:en:0", "a:eg:0", "a:eu:0", "a:ek:0", "a:ef:0", "a:b:0"];
+  assert(parseAcao("a:t:m")?.tipo === "toggle", "botão manutenção");
+  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:n", "a:nl", "a:np", "a:ns", "a:ny", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:t:m", "a:q", "a:k:m", "a:h", "a:ic:m", "a:ic:c", "a:k:l", "a:en:0", "a:eg:0", "a:eu:0", "a:ek:0", "a:ef:0", "a:b:0"];
   for (const dados of todos) {
     assert(parseAcao(dados) !== undefined, `callback ${dados}`);
     assert(dados.length <= 64, `callback longo ${dados}`);
@@ -113,7 +115,8 @@ function semIa(texto: string): void {
   assert(visao.texto.includes("homologação"), "painel sem ambiente");
   semIa(visao.texto);
   const dados = botoes(visao);
-  assert(dados.includes("a:g") && dados.includes("a:ms") && dados.includes("a:n") && dados.includes("a:h"), "visão sem tarifas/ambiente/anúncio/clube");
+  assert(dados.includes("a:g") && dados.includes("a:ms") && dados.includes("a:n") && dados.includes("a:h") && dados.includes("a:t:m"), "visão sem tarifas/ambiente/anúncio/clube/manutenção");
+  assert(visao.texto.includes("Manutenção: desligada"), "visão sem estado da manutenção");
   assert(dados.every((item) => item.startsWith("a:") && item.length <= 64), "callback fora do padrão");
 }
 
@@ -153,6 +156,16 @@ function semIa(texto: string): void {
   assert(configAtual().prefixoThialinha === false, "identificação no atendimento não desligou");
   assert(prefixo.tela.texto.includes("Mais opções"), "depois do toggle não voltou às opções");
   semIa(prefixo.tela.texto);
+  const manutencao = await aplicarAcao(kv, "1001", "a:t:m");
+  assert(configAtual().manutencao === true, "manutenção não ligou");
+  assert((manutencao.aviso ?? "").includes("ligada"), "aviso de manutenção ligada falhou");
+  assert(manutencao.tela.texto.includes("Manutenção: ligada"), "início sem manutenção ligada");
+  assert(manutencao.tela.teclado.flat().some((item) => item.text === "Manutenção: on"), "botão não ficou on");
+  assert(RESPOSTA_MANUTENCAO.includes("MANUTENÇÃO PROGRAMADA"), "aviso ao cliente sem título");
+  assert(RESPOSTA_MANUTENCAO.includes("Sua vida financeira, ainda mais simples."), "aviso ao cliente incompleto");
+  const desliga = await aplicarAcao(kv, "1001", "a:t:m");
+  assert(configAtual().manutencao === false, "manutenção não desligou");
+  assert((desliga.aviso ?? "").includes("desligada"), "aviso de manutenção desligada falhou");
 }
 
 {

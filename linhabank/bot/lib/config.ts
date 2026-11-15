@@ -16,6 +16,7 @@ export type ConfigBot = {
   webappUrl: string;
   prefixoThialinha: boolean;
   botaoMiniApp: boolean;
+  manutencao: boolean;
   chatsAdmin: string;
   canalMovimento: string;
   nomeExibido: string;
@@ -44,6 +45,7 @@ export function defaultsEnv(): ConfigBot {
     webappUrl: (process.env.TELEGRAM_WEBAPP_URL ?? "").trim(),
     prefixoThialinha: process.env.LINHABANK_PREFIXO_THIALINHA?.trim() !== "0",
     botaoMiniApp: process.env.LINHABANK_BOTAO_APP?.trim() !== "0",
+    manutencao: process.env.LINHABANK_MANUTENCAO?.trim() === "1",
     chatsAdmin: (process.env.LINHABANK_ADMIN_CHATS ?? "").trim(),
     canalMovimento: (process.env.LINHABANK_CANAL_MOVIMENTO ?? "").trim(),
     nomeExibido: (process.env.LINHABANK_NOME ?? "LinhaBank").trim() || "LinhaBank",
@@ -61,6 +63,10 @@ export function configAtual(): ConfigBot {
   const base = { ...defaultsEnv(), ...overlay };
   base.chatsAdmin = unirChatsAdmin(base.chatsAdmin);
   return base;
+}
+
+export function emManutencao(): boolean {
+  return configAtual().manutencao === true;
 }
 
 export function unirChatsAdmin(...listas: Array<string | undefined>): string {
@@ -138,6 +144,7 @@ function aplicarPedido(base: ConfigBot, pedido: unknown): ConfigBot {
   }
   if (typeof bruto.prefixoThialinha === "boolean") proximo.prefixoThialinha = bruto.prefixoThialinha;
   if (typeof bruto.botaoMiniApp === "boolean") proximo.botaoMiniApp = bruto.botaoMiniApp;
+  if (typeof bruto.manutencao === "boolean") proximo.manutencao = bruto.manutencao;
   if (typeof bruto.chatsAdmin === "string") {
     proximo.chatsAdmin = bruto.chatsAdmin
       .split(",")

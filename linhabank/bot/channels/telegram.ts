@@ -9,6 +9,7 @@ import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } fro
 import { abrirClube, comandoClube, tratarCallbackClube } from "../lib/clube/telegram.js";
 import { aoAbrirContaFidelidade, capturarStartIndicacao, payloadStart } from "../lib/fidelidade/index.js";
 import { garantirConfig } from "../lib/config.js";
+import { responderManutencao } from "../lib/manutencao.js";
 import { chatsAdmin } from "../lib/modo.js";
 import { responderLocal } from "../lib/conversa/index.js";
 import { pngCopiaECola } from "../lib/qr.js";
@@ -136,11 +137,13 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
 
   if (atualizacao.tipo === "sem_texto") {
     if (await tratarSemTextoAdmin(deps.kv, atualizacao.chatId)) return;
+    if (await responderManutencao(deps.kv, atualizacao)) return;
     await responderSemTexto(deps.kv, atualizacao);
     return;
   }
   if (atualizacao.tipo === "comprovante") {
     if (await tratarMidiaAdmin(deps.kv, atualizacao)) return;
+    if (await responderManutencao(deps.kv, atualizacao)) return;
     const local = await responderLocal(
       deps.kv,
       atualizacao.chatId,
@@ -163,6 +166,7 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
       await tratarCallbackAdmin(deps.kv, atualizacao);
       return;
     }
+    if (await responderManutencao(deps.kv, atualizacao)) return;
     if (atualizacao.decisao === "clube") {
       await tratarCallbackClube(deps.kv, atualizacao);
       return;
@@ -190,6 +194,7 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
   }
 
   if (await tratarTextoAdmin(deps.kv, atualizacao)) return;
+  if (await responderManutencao(deps.kv, atualizacao)) return;
   const startPayload = payloadStart(atualizacao.texto);
   if (startPayload !== undefined) {
     await capturarStartIndicacao(deps.kv, atualizacao.chatId, startPayload);

@@ -67,6 +67,23 @@ export const RESPOSTA_PIX_INDISPONIVEL =
 export const RESPOSTA_CONTA_DESATIVADA =
   "Sua conta está desativada. PIX e depósitos ficam parados até a gerência reativar.";
 
+export const RESPOSTA_MANUTENCAO = [
+  "🔧 LINHABANK | MANUTENÇÃO PROGRAMADA",
+  "",
+  "Olá! 👋",
+  "",
+  "Estamos realizando uma manutenção em nossos sistemas para trazer melhorias, mais estabilidade e uma experiência ainda melhor para você.",
+  "",
+  "💙 Durante esse período, alguns serviços da LINHABANK poderão ficar temporariamente indisponíveis.",
+  "",
+  "🚀 Nossa equipe está trabalhando para restabelecer tudo o mais rápido possível.",
+  "",
+  "Agradecemos pela compreensão e pela confiança!",
+  "",
+  "LINHABANK",
+  "Sua vida financeira, ainda mais simples.",
+].join("\n");
+
 export const RESPOSTA_DESTINO_INTERNO =
   "Essa chave é de uma conta LinhaBank. Nesse caso o PIX vai direto, sem taxa. Quer continuar?";
 

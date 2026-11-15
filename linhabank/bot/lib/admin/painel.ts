@@ -440,7 +440,22 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
   }
   if (acao.tipo === "toggle") {
     const atual = configAtual();
-    await gravarConfig(kv, { [acao.campo]: !atual[acao.campo] });
+    const proximo = !atual[acao.campo];
+    await gravarConfig(kv, { [acao.campo]: proximo });
+    if (acao.campo === "manutencao") {
+      await registrarAuditoria(kv, {
+        operadorChatId: chatId,
+        acao: proximo ? "ligar_manutencao" : "desligar_manutencao",
+        motivo: "Ajuste da gerência.",
+        valorAnterior: String(atual.manutencao),
+        valorNovo: String(proximo),
+      });
+      await gravarUi(kv, chatId, { aba: "visao", pagina: 0 });
+      return {
+        tela: await montarTela(kv, chatId),
+        aviso: proximo ? "Manutenção ligada. O cliente vê o aviso." : "Manutenção desligada.",
+      };
+    }
     await gravarUi(kv, chatId, { aba: "mais", pagina: 0 });
     return { tela: await montarTela(kv, chatId), aviso: "Ajuste gravado.", atualizarPerfil: true };
   }
@@ -681,7 +696,7 @@ export function parseAcao(dados: string):
   | { tipo: "cancelar_pix"; indice: number }
   | { tipo: "cartao"; indice: number }
   | { tipo: "pedir"; campo: CampoPendente; indice?: number }
-  | { tipo: "toggle"; campo: "prefixoThialinha" | "botaoMiniApp" }
+  | { tipo: "toggle"; campo: "prefixoThialinha" | "botaoMiniApp" | "manutencao" }
   | { tipo: "cancelar" }
   | { tipo: "atualizar" }
   | { tipo: "anuncio_limpar" }
@@ -711,6 +726,7 @@ export function parseAcao(dados: string):
   if (dados === "a:r") return { tipo: "atualizar" };
   if (dados === "a:t:p") return { tipo: "toggle", campo: "prefixoThialinha" };
   if (dados === "a:t:b") return { tipo: "toggle", campo: "botaoMiniApp" };
+  if (dados === "a:t:m") return { tipo: "toggle", campo: "manutencao" };
   if (dados === "a:q") return { tipo: "pedir", campo: "busca" };
   const aba = dados.match(/^a:([cpl]):(\d+)$/) ?? dados.match(/^a:([cpl])$/);
   if (aba !== null) {
@@ -887,6 +903,7 @@ function telaResumo(
     `Hoje: + R$ ${reaisDe(volume.credito)}  − R$ ${reaisDe(volume.debito)}`,
     `PIX agendados: ${agendados}`,
     cartoes > 0 ? `Cartões bloqueados: ${cartoes}` : "",
+    `Manutenção: ${config.manutencao ? "ligada" : "desligada"}`,
     `Ambiente: ${config.modo === "live" ? "produção" : "homologação"} · ${rotuloLiquidacao()}`,
   ]
     .filter((item) => item.length > 0)
@@ -895,6 +912,12 @@ function telaResumo(
     texto,
     teclado: [
       ...nav("visao"),
+      [
+        {
+          text: config.manutencao ? "Manutenção: on" : "Manutenção: off",
+          callback_data: "a:t:m",
+        },
+      ],
       [
         {
           text: config.modo === "sandbox" ? "• Homologação" : "Homologação",
@@ -1183,6 +1206,7 @@ function telaMais(config: ReturnType<typeof configAtual>): TelaAdmin {
     "",
     `Nome no chat: ${config.prefixoThialinha ? "ligado" : "desligado"}`,
     `Aplicativo: ${config.botaoMiniApp ? "ligado" : "desligado"}`,
+    `Manutenção: ${config.manutencao ? "ligada" : "desligada"}`,
     `URL do aplicativo: ${config.webappUrl || "não informada"}`,
     `Ambiente: ${config.modo === "live" ? "produção" : "homologação"}`,
   ].join("\n");
@@ -1193,6 +1217,12 @@ function telaMais(config: ReturnType<typeof configAtual>): TelaAdmin {
       [
         { text: config.prefixoThialinha ? "Nome no chat: on" : "Nome no chat: off", callback_data: "a:t:p" },
         { text: config.botaoMiniApp ? "App: on" : "App: off", callback_data: "a:t:b" },
+      ],
+      [
+        {
+          text: config.manutencao ? "Manutenção: on" : "Manutenção: off",
+          callback_data: "a:t:m",
+        },
       ],
       [{ text: "URL do app", callback_data: "a:k:w" }],
       [

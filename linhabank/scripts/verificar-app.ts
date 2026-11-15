@@ -11,6 +11,8 @@ delete process.env.LINHABANK_DB_PATH;
 
 const { aceitarTermos, creditarPixRecebido } = await import("../bot/lib/banco.js");
 const { executarApp } = await import("../bot/lib/app/api.js");
+const { gravarConfig } = await import("../bot/lib/config.js");
+const { RESPOSTA_MANUTENCAO } = await import("../bot/lib/respostas.js");
 const { clienteDoPedido, montarInitData, validarInitData } = await import("../bot/lib/app/init-data.js");
 const { htmlMiniApp } = await import("../bot/lib/app/pagina.js");
 const { classificarTexto } = await import("../bot/lib/conversa/index.js");
@@ -103,6 +105,16 @@ function kvMemoria(): HostKvApi {
   assert(recusa.ok === false && recusa.motivo === "precisa_confirmar", "PIX saiu sem confirmar");
   const ainda = await executarApp(kv, "42", "Ana", { acao: "resumo" });
   assert(ainda.saldo === "50,00", "PIX sem confirmação mexeu no saldo");
+}
+
+{
+  const kv = kvMemoria();
+  await aceitarTermos(kv, "42", "Ana Souza");
+  await gravarConfig(kv, { manutencao: true });
+  const parado = await executarApp(kv, "42", "Ana", { acao: "resumo" });
+  assert(parado.ok === false && parado.motivo === "manutencao", "app funcionou em manutenção");
+  assert(parado.mensagem === RESPOSTA_MANUTENCAO, "app sem o aviso de manutenção");
+  await gravarConfig(kv, { manutencao: false });
 }
 
 {

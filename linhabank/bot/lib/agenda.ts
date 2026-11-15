@@ -12,6 +12,7 @@ import {
   type ResultadoOperacao,
 } from "./banco.js";
 import { registrarTroca, enviarTexto } from "./atendimento.js";
+import { emManutencao, garantirConfig } from "./config.js";
 import {
   formatarQuando,
   instanteNoBrasil,
@@ -703,8 +704,10 @@ async function executarCiclo(
   agora: Date,
   avisar: AvisarAgenda,
 ): Promise<ResumoProcessamento> {
+  await garantirConfig(kv);
   const pendentes = await exclusivo(kv, () => coletarAvisos(kv));
   await entregar(kv, pendentes, avisar);
+  if (emManutencao()) return { enviados: 0, mantidos: 0, encerrados: 0 };
   const devidos = await exclusivo(kv, () => reivindicar(kv, agora));
   let enviados = 0;
   let mantidos = 0;
