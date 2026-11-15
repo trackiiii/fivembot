@@ -28,7 +28,7 @@ type TextoAdmin = Extract<Atualizacao, { tipo: "texto" }>;
 export async function tratarCallbackAdmin(kv: HostKvApi, atualizacao: CallbackAdmin): Promise<void> {
   await garantirConfig(kv);
   if (!ehAdmin(atualizacao.chatId)) {
-    await responderCallback(atualizacao.callbackId, "Painel restrito.");
+    await responderCallback(atualizacao.callbackId, "Acesso restrito à gerência.");
     return;
   }
   const resultado = await aplicarAcao(kv, atualizacao.chatId, atualizacao.dados);
@@ -61,8 +61,8 @@ export async function tratarTextoAdmin(kv: HostKvApi, atualizacao: TextoAdmin): 
     }
     const texto =
       auth === "pedir_token"
-        ? "Painel administrativo. Envie /admin e o token."
-        : "Este painel é restrito.";
+        ? "Acesso à gerência LinhaBank. Envie /admin seguido da chave de acesso."
+        : "Acesso restrito à gerência LinhaBank.";
     await enviarTexto(atualizacao.chatId, texto, { prefixo: false, replyTo: atualizacao.mensagemId });
     return true;
   }
@@ -71,7 +71,7 @@ export async function tratarTextoAdmin(kv: HostKvApi, atualizacao: TextoAdmin): 
   if (resultado === undefined) return false;
   const ui = await lerUi(kv, atualizacao.chatId);
   const id = await mostrarPainel(atualizacao.chatId, resultado.tela, ui.mensagemId);
-  await gravarUi(kv, atualizacao.chatId, { ...ui, aba: "config", mensagemId: id ?? ui.mensagemId });
+  await gravarUi(kv, atualizacao.chatId, { ...ui, mensagemId: id ?? ui.mensagemId });
   if (resultado.atualizarPerfil === true) {
     await configurarPerfil();
     await configurarMenuApp();

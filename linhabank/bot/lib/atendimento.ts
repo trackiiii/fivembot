@@ -509,7 +509,7 @@ export async function configurarComandosAdmin(chatId: string): Promise<boolean> 
   const id = Number(chatId);
   if (!Number.isSafeInteger(id)) return false;
   return chamarTelegram("setMyCommands", {
-    commands: [...COMANDOS_CLIENTE, { command: "admin", description: "Painel administrativo" }],
+    commands: [...COMANDOS_CLIENTE, { command: "admin", description: "Gerência LinhaBank" }],
     scope: { type: "chat", chat_id: id },
   });
 }

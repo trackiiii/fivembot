@@ -13,7 +13,7 @@ Este projeto **não está em produção**. Enquanto o gateway Pix, a segurança 
 - Depósito PIX com QR Code e copia e cola. O saldo **não** sobe na geração. Sobe só no webhook do provedor, ou no simulador de sandbox.
 - Histórico no ledger (lançamentos não são apagados). Comprovante `LB-…` em cada movimentação.
 - Transferência, boleto, cartão virtual, PIX agendado e protocolo.
-- Painel admin no próprio Telegram: `/admin` abre um menu de botões (visão, contas, PIX, ledger, configuração). Sem HTML e sem diálogo da Thialinha. A configuração fica no KV do bot.
+- Gerência no Telegram: `/admin` abre o painel operacional (custódia, contas, ficha, extrato, tesouraria PIX, movimento e tarifas). Bloqueio de conta e cartão, liquidação em homologação, cancelamento de cobrança e parametrização. Sem página web.
 - Foto de comprovante **não** credita saldo.
 - A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo. Sem teclado extra no chat.
 - Mini-app do Telegram em `/v1/channels/app/`. Saldo, depósito PIX, envio com confirmação e extrato da mesma conta. O botão nativo **LinhaBank** só aparece com `TELEGRAM_WEBAPP_URL` em HTTPS.
@@ -66,7 +66,7 @@ Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia)
 
 - Telegram: `POST /v1/channels/telegram/webhook`
 - PIX recebido: `POST /v1/channels/pix/recebido` com `X-Linhabank-Gateway-Token`
-- Admin: no Telegram, `/admin` (com `ADMIN_TOKEN` na primeira vez, ou chat em `LINHABANK_ADMIN_CHATS`). Tudo por botões no chat.
+- Gerência: no Telegram, `/admin` (chat `7069054484`, `LINHABANK_ADMIN_CHATS` ou `/admin` + `ADMIN_TOKEN`). Painel, contas, ficha, extrato, PIX e tarifas.
 - Mini-app: `GET /v1/channels/app/` e `POST /v1/channels/app/api` com `Authorization: tma <initData>`
 - Simular pagamento (só sandbox): `POST /v1/channels/admin/sandbox/pagar` `{ "cobrancaId": "dep-…" }`
 

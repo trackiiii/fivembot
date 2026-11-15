@@ -480,6 +480,15 @@ export async function criarAgendamento(
   });
 }
 
+export async function contarAgendamentosAtivos(kv: HostKvApi): Promise<number> {
+  const chats = await lerChats(kv);
+  let total = 0;
+  for (const chatId of chats) {
+    total += (await lerLista(kv, chatId)).filter((item) => item.status === "ativo").length;
+  }
+  return total;
+}
+
 export async function listarAgendamentos(kv: HostKvApi, chatId: string): Promise<ResultadoAgenda> {
   if ((await lerConta(kv, chatId)) === undefined) return falha("sem_conta", RESPOSTA_SEM_CONTA);
   const ativos = (await lerLista(kv, chatId))

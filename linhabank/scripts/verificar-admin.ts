@@ -44,15 +44,22 @@ function botoes(tela: { teclado: { text: string; callback_data: string }[][] }):
   return tela.teclado.flat().map((item) => item.callback_data);
 }
 
+function semIa(texto: string): void {
+  assert(!/Oii|Perfeitooo|Thialinha|inteligência artificial|\bIA\b|feito por|botões neste chat/i.test(texto), `painel informal: ${texto}`);
+}
+
 {
   assert(lerComandoAdmin("/admin") !== undefined, "/admin não reconhecido");
   assert(lerComandoAdmin("/admin@linhabank_bot token-admin-teste")?.token === "token-admin-teste", "token do /admin");
   assert(lerComandoAdmin("saldo") === undefined, "saldo não é /admin");
-  assert(parseAcao("a:g")?.tipo === "aba", "botão Config");
-  assert(parseAcao("a:k:f")?.tipo === "pedir", "botão taxa");
+  assert(parseAcao("a:g")?.tipo === "aba", "botão Tarifas");
+  assert(parseAcao("a:k:f")?.tipo === "pedir", "botão tarifa");
   assert(parseAcao("a:b:0")?.tipo === "bloquear", "botão bloquear");
-  assert((parseAcao("a:x:2") as { indice?: number }).indice === 2, "índice confirmar PIX");
-  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b"];
+  assert(parseAcao("a:d:0")?.tipo === "aba", "botão ficha");
+  assert(parseAcao("a:j:0")?.tipo === "cartao", "botão cartão");
+  assert(parseAcao("a:y:1")?.tipo === "cancelar_pix", "botão cancelar PIX");
+  assert((parseAcao("a:x:2") as { indice?: number }).indice === 2, "índice liquidar PIX");
+  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q"];
   for (const dados of todos) {
     assert(parseAcao(dados) !== undefined, `callback ${dados}`);
     assert(dados.length <= 64, `callback longo ${dados}`);
@@ -75,11 +82,13 @@ function botoes(tela: { teclado: { text: string; callback_data: string }[][] }):
   const kv = kvMemoria();
   await gravarConfig(kv, { chatsAdmin: "1001" });
   const visao = await montarTela(kv, "1001");
-  assert(visao.texto.includes("LINHABANK · Administração"), "painel sem título");
-  assert(visao.texto.includes("Sem a Thialinha"), "painel sem aviso de botões");
-  assert(!/Oii|Perfeitooo|Thialinha:/.test(visao.texto), "painel com diálogo da Thialinha");
+  assert(visao.texto.includes("LINHABANK"), "painel sem instituição");
+  assert(visao.texto.includes("Gerência de contas"), "painel sem gerência");
+  assert(visao.texto.includes("Custódia"), "painel sem custódia");
+  assert(visao.texto.includes("homologação"), "painel sem ambiente");
+  semIa(visao.texto);
   const dados = botoes(visao);
-  assert(dados.includes("a:g") && dados.includes("a:ms"), "visão sem botões de config/modo");
+  assert(dados.includes("a:g") && dados.includes("a:ms"), "visão sem tarifas/ambiente");
   assert(dados.every((item) => item.startsWith("a:") && item.length <= 64), "callback fora do padrão");
 }
 
@@ -87,42 +96,57 @@ function botoes(tela: { teclado: { text: string; callback_data: string }[][] }):
   const kv = kvMemoria();
   await gravarConfig(kv, { chatsAdmin: "1001" });
   const live = await aplicarAcao(kv, "1001", "a:ml");
-  assert(live.tela.teclado.flat().some((b) => b.callback_data === "a:my"), "live sem confirmar");
-  assert(modoCarteira() === "sandbox", "live mudou sem confirmar");
-  const ok = await aplicarAcao(kv, "1001", "a:my");
-  assert(modoCarteira() === "live", "confirmar live falhou");
+  assert(live.tela.teclado.flat().some((b) => b.callback_data === "a:my"), "produção sem confirmar");
+  semIa(live.tela.texto);
+  assert(modoCarteira() === "sandbox", "produção mudou sem confirmar");
+  await aplicarAcao(kv, "1001", "a:my");
+  assert(modoCarteira() === "live", "confirmar produção falhou");
   const sandbox = await aplicarAcao(kv, "1001", "a:ms");
-  assert(modoCarteira() === "sandbox" && (sandbox.aviso ?? "").includes("sandbox"), "voltar sandbox falhou");
-  void ok;
+  assert(modoCarteira() === "sandbox" && (sandbox.aviso ?? "").includes("homologação"), "voltar homologação falhou");
 }
 
 {
   const kv = kvMemoria();
   await gravarConfig(kv, { chatsAdmin: "1001" });
-  assert(taxaPixExternoCentavos(10_000) === 0, "taxa inicial não é zero");
+  assert(taxaPixExternoCentavos(10_000) === 0, "tarifa inicial não é zero");
   await aplicarAcao(kv, "1001", "a:k:f");
   const salvo = await aplicarTextoAdmin(kv, "1001", "150");
-  assert(salvo !== undefined && configAtual().taxaCentavos === 150, "taxa pelo botão não gravou");
+  assert(salvo !== undefined && configAtual().taxaCentavos === 150, "tarifa pelo botão não gravou");
   await aplicarAcao(kv, "1001", "a:k:e");
   await aplicarTextoAdmin(kv, "1001", "1,50");
-  assert(taxaPixExternoCentavos(10_000) === 300, `taxa do painel deu ${taxaPixExternoCentavos(10_000)}`);
+  assert(taxaPixExternoCentavos(10_000) === 300, `tarifa do painel deu ${taxaPixExternoCentavos(10_000)}`);
   await aplicarAcao(kv, "1001", "a:k:h");
   await aplicarTextoAdmin(kv, "1001", "admin@linhabank.test");
   assert(configAtual().chaveRecebimento === "admin@linhabank.test", "chave não veio do painel");
   const prefixo = await aplicarAcao(kv, "1001", "a:t:p");
-  assert(configAtual().prefixoThialinha === false, "prefixo não desligou");
-  assert(prefixo.tela.texto.includes("Configuração"), "depois do toggle não voltou à config");
+  assert(configAtual().prefixoThialinha === false, "identificação no atendimento não desligou");
+  assert(prefixo.tela.texto.includes("Parametrização"), "depois do toggle não voltou à parametrização");
+  semIa(prefixo.tela.texto);
 }
 
 {
   const kv = kvMemoria();
   await gravarConfig(kv, { chatsAdmin: "1001" });
-  await aceitarTermos(kv, "77", "Ana");
+  const conta = await aceitarTermos(kv, "77", "Ana");
   const lista = await aplicarAcao(kv, "1001", "a:c");
   assert(lista.tela.texto.includes("Ana"), "contas sem a titular");
   assert(lista.tela.teclado.flat().some((b) => b.callback_data === "a:b:0"), "contas sem bloquear");
+  assert(lista.tela.teclado.flat().some((b) => b.callback_data === "a:d:0"), "contas sem ficha");
+  const ficha = await aplicarAcao(kv, "1001", "a:d:0");
+  assert(ficha.tela.texto.includes("Ficha cadastral"), "ficha não abriu");
+  assert(ficha.tela.texto.includes(conta.numero), "ficha sem número");
+  assert(ficha.tela.texto.includes("Agência"), "ficha sem agência");
+  assert(ficha.tela.texto.includes("Cartão virtual"), "ficha sem cartão");
+  semIa(ficha.tela.texto);
   const bloqueada = await aplicarAcao(kv, "1001", "a:b:0");
-  assert((bloqueada.aviso ?? "").includes("bloqueada"), "bloquear pelo botão falhou");
+  assert((bloqueada.aviso ?? "").includes("bloqueada"), "bloquear pela gerência falhou");
+  const cartao = await aplicarAcao(kv, "1001", "a:j:0");
+  assert((cartao.aviso ?? "").includes("Cartão"), "bloquear cartão falhou");
+  const extrato = await aplicarAcao(kv, "1001", "a:e:0");
+  assert(extrato.tela.texto.includes("Extrato"), "extrato gerencial não abriu");
+  await aplicarAcao(kv, "1001", "a:q");
+  const busca = await aplicarTextoAdmin(kv, "1001", conta.numero);
+  assert(busca?.tela.texto.includes("Ficha cadastral") === true, "localizar conta não abriu a ficha");
   const livre = await bloquearConta(kv, "77", false);
   assert(livre?.status === "ativa", "liberar depois do painel falhou");
 }
@@ -134,10 +158,23 @@ function botoes(tela: { teclado: { text: string; callback_data: string }[][] }):
   const deposito = await operarConta(kv, "77", "dep-admin", { acao: "depositar", valor: "25,00" });
   assert(deposito.ok === true, "depósito do teste admin falhou");
   const pix = await aplicarAcao(kv, "1001", "a:p");
-  assert(pix.tela.teclado.flat().some((b) => b.callback_data === "a:x:0"), "PIX sem confirmar");
+  assert(pix.tela.texto.includes("Tesouraria PIX"), "tesouraria sem título");
+  semIa(pix.tela.texto);
+  assert(pix.tela.teclado.flat().some((b) => b.callback_data === "a:x:0"), "PIX sem liquidar");
+  assert(pix.tela.teclado.flat().some((b) => b.callback_data === "a:y:0"), "PIX sem cancelar");
   const pago = await aplicarAcao(kv, "1001", "a:x:0");
-  assert(pago.aviso === "PIX confirmado.", `sandbox pagar: ${pago.aviso}`);
+  assert(pago.aviso === "Liquidação registrada.", `sandbox pagar: ${pago.aviso}`);
   assert(pago.avisoCliente?.chatId === "77", "cliente não foi avisado");
+}
+
+{
+  const kv = kvMemoria();
+  await gravarConfig(kv, { chatsAdmin: "1001" });
+  await aceitarTermos(kv, "88", "Bia");
+  const deposito = await operarConta(kv, "88", "dep-cancel", { acao: "depositar", valor: "10,00" });
+  assert(deposito.ok === true, "depósito para cancelar falhou");
+  const cancelado = await aplicarAcao(kv, "1001", "a:y:0");
+  assert(cancelado.aviso === "Cobrança cancelada.", `cancelar: ${cancelado.aviso}`);
 }
 
 {

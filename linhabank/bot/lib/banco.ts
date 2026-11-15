@@ -925,10 +925,44 @@ export async function bloquearConta(
   return conta;
 }
 
+export async function bloquearCartaoGerencia(
+  kv: HostKvApi,
+  chatId: string,
+  bloquear: boolean,
+): Promise<Conta | undefined> {
+  const conta = await lerConta(kv, chatId);
+  if (conta === undefined) return undefined;
+  conta.cartaoBloqueado = bloquear;
+  await gravarConta(kv, conta);
+  return conta;
+}
+
+export async function cancelarCobrancaAberta(kv: HostKvApi, cobrancaId: string): Promise<Cobranca | undefined> {
+  const cobranca = sqlDisponivel() ? await lerCobrancaSql(cobrancaId) : await lerCobranca(kv, cobrancaId);
+  if (cobranca === undefined || cobranca.status !== "aberta") return undefined;
+  cobranca.status = "cancelada";
+  await salvarCobranca(kv, cobranca);
+  return cobranca;
+}
+
+export type ContaPainel = {
+  chatId: string;
+  nome: string;
+  numero: string;
+  agencia: string;
+  saldo: string;
+  saldoCentavos: number;
+  status: string;
+  chaveInterna: string;
+  cartaoFinal: string;
+  cartaoBloqueado: boolean;
+  aceitouEm: string;
+};
+
 export async function painelCarteira(kv: HostKvApi): Promise<{
-  contas: { chatId: string; nome: string; numero: string; saldo: string; status: string }[];
-  ledger: { em: string; tipo: string; valor: string; conta: string; comprovante?: string }[];
-  cobrancas: { id: string; valor: string; status: string; txid: string }[];
+  contas: ContaPainel[];
+  ledger: { em: string; tipo: string; valor: string; valorCentavos: number; conta: string; comprovante?: string }[];
+  cobrancas: { id: string; chatId: string; valor: string; valorCentavos: number; status: string; txid: string }[];
   totalCentavos: number;
   sql: boolean;
 }> {
@@ -936,8 +970,8 @@ export async function painelCarteira(kv: HostKvApi): Promise<{
     ? await listarContasSql(80)
     : await Promise.all((await listarChatIds(kv)).map((id) => lerConta(kv, id)));
   const vivas = contas.filter((item): item is Conta => item !== undefined);
-  const ledger = sqlDisponivel() ? await listarLedgerSql(40) : await listarLedger(kv, 40);
-  const cobrancas = sqlDisponivel() ? await listarCobrancasSql(undefined, 20) : await listarCobrancas(kv, undefined, 20);
+  const ledger = sqlDisponivel() ? await listarLedgerSql(80) : await listarLedger(kv, 80);
+  const cobrancas = sqlDisponivel() ? await listarCobrancasSql(undefined, 40) : await listarCobrancas(kv, undefined, 40);
   return {
     sql: sqlDisponivel(),
     totalCentavos: vivas.reduce((soma, conta) => soma + conta.saldoCentavos, 0),
@@ -945,19 +979,28 @@ export async function painelCarteira(kv: HostKvApi): Promise<{
       chatId: conta.chatId,
       nome: conta.nome,
       numero: conta.numero,
+      agencia: conta.agencia,
       saldo: reaisDe(conta.saldoCentavos),
+      saldoCentavos: conta.saldoCentavos,
       status: conta.status,
+      chaveInterna: conta.chaveInterna,
+      cartaoFinal: conta.cartaoFinal,
+      cartaoBloqueado: conta.cartaoBloqueado,
+      aceitouEm: conta.aceitouEm,
     })),
     ledger: ledger.map((item) => ({
       em: item.em,
       tipo: item.tipo,
       valor: reaisDe(item.valorCentavos),
+      valorCentavos: item.valorCentavos,
       conta: item.chatId,
       comprovante: item.comprovante,
     })),
     cobrancas: cobrancas.map((item) => ({
       id: item.id,
+      chatId: item.chatId,
       valor: reaisDe(item.valorCentavos),
+      valorCentavos: item.valorCentavos,
       status: item.status,
       txid: item.txid,
     })),

@@ -2,16 +2,27 @@ import { timingSafeEqual } from "node:crypto";
 
 import type { HostKvApi } from "@grok/agent-sdk";
 
-import { bloquearConta, confirmarCobrancaSandbox, painelCarteira, reaisDe } from "../banco.js";
+import { contarAgendamentosAtivos } from "../agenda.js";
+import {
+  bloquearCartaoGerencia,
+  bloquearConta,
+  cancelarCobrancaAberta,
+  confirmarCobrancaSandbox,
+  operarConta,
+  painelCarteira,
+  reaisDe,
+  type ContaPainel,
+} from "../banco.js";
 import { configAtual, garantirConfig, gravarConfig, unirChatsAdmin } from "../config.js";
 import { gatewayConfigurada } from "../gateway.js";
-import { ehAdmin, emSandbox, modoCarteira } from "../modo.js";
-import { pspAtual } from "../psp.js";
+import { dataHoraBrasil, formatarQuando } from "../horario.js";
+import { ehAdmin, emSandbox } from "../modo.js";
+import { taxaPixExternoCentavos } from "../taxa.js";
 
 export const CHAVE_UI = (chatId: string) => `linhabank:admin:ui:${chatId}`;
 export const CHAVE_PENDENTE = (chatId: string) => `linhabank:admin:pendente:${chatId}`;
 
-export type AbaAdmin = "visao" | "contas" | "pix" | "ledger" | "config" | "liveok";
+export type AbaAdmin = "visao" | "contas" | "pix" | "ledger" | "config" | "liveok" | "ficha" | "extrato";
 export type CampoPendente =
   | "nomeExibido"
   | "chaveRecebimento"
@@ -20,7 +31,8 @@ export type CampoPendente =
   | "taxaPercentual"
   | "limiteCentavos"
   | "webappUrl"
-  | "chatsAdmin";
+  | "chatsAdmin"
+  | "busca";
 
 export type BotaoAdmin = { text: string; callback_data: string };
 
@@ -40,12 +52,13 @@ export type ResultadoAdmin = {
 export type UiAdmin = {
   aba: AbaAdmin;
   pagina: number;
+  indice?: number;
   mensagemId?: number;
 };
 
 const PAGE = 4;
 
-const CAMPOS: Record<string, CampoPendente> = {
+const CAMPOS: Record<string, Exclude<CampoPendente, "busca">> = {
   n: "nomeExibido",
   h: "chaveRecebimento",
   i: "cidadeRecebimento",
@@ -56,26 +69,37 @@ const CAMPOS: Record<string, CampoPendente> = {
   s: "chatsAdmin",
 };
 
-const ROTULO_CAMPO: Record<CampoPendente, string> = {
-  nomeExibido: "nome exibido",
+const ROTULO_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
+  nomeExibido: "nome da instituição",
   chaveRecebimento: "chave PIX de recebimento",
-  cidadeRecebimento: "cidade do BR Code",
-  taxaCentavos: "taxa fixa em centavos",
-  taxaPercentual: "taxa percentual",
-  limiteCentavos: "limite por operação em centavos",
-  webappUrl: "URL HTTPS do mini-app (opcional)",
-  chatsAdmin: "IDs dos chats admin, separados por vírgula",
+  cidadeRecebimento: "praça da cobrança",
+  taxaCentavos: "tarifa PIX externo, em centavos",
+  taxaPercentual: "tarifa PIX externo, em percentual",
+  limiteCentavos: "limite por operação, em centavos",
+  webappUrl: "endereço HTTPS do canal digital",
+  chatsAdmin: "identificadores dos operadores, separados por vírgula",
 };
 
-const DICA_CAMPO: Record<CampoPendente, string> = {
+const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   nomeExibido: "2 a 32 caracteres.",
   chaveRecebimento: "E-mail, CPF, CNPJ, telefone ou chave aleatória.",
   cidadeRecebimento: "Até 15 letras, sem acento.",
-  taxaCentavos: "Ex.: 99 = R$ 0,99. PIX entre contas LinhaBank continua sem taxa.",
-  taxaPercentual: "Ex.: 1,50. Zero se vazio.",
+  taxaCentavos: "Ex.: 99 = R$ 0,99. Transferência entre contas LinhaBank permanece isenta.",
+  taxaPercentual: "Ex.: 1,50. Informe 0 para isentar o percentual.",
   limiteCentavos: "Ex.: 250000 = R$ 2.500,00.",
-  webappUrl: "Deixe vazio. Só use se houver HTTPS. O painel não precisa disso.",
-  chatsAdmin: "Só números. O seu chat entra sozinho se ainda não estiver.",
+  webappUrl: "Opcional. Somente HTTPS.",
+  chatsAdmin: "Somente números. O operador atual permanece na lista.",
+};
+
+const ROTULO_MOVIMENTO: Record<string, string> = {
+  pix_enviado: "PIX enviado",
+  pix_recebido: "PIX recebido",
+  deposito: "Depósito",
+  boleto: "Boleto",
+  transferencia_enviada: "Transferência enviada",
+  transferencia_recebida: "Transferência recebida",
+  taxa: "Tarifa",
+  estorno: "Estorno",
 };
 
 export function lerComandoAdmin(texto: string): { token?: string } | undefined {
@@ -107,17 +131,13 @@ export async function lerUi(kv: HostKvApi, chatId: string): Promise<UiAdmin> {
   }
   const aba = bruto.aba;
   const pagina = bruto.pagina;
+  const indice = bruto.indice;
   const mensagemId = bruto.mensagemId;
   return {
-    aba:
-      aba === "contas" || aba === "pix" || aba === "ledger" || aba === "config" || aba === "liveok"
-        ? aba
-        : "visao",
-    pagina: typeof pagina === "number" && Number.isSafeInteger(pagina) && pagina >= 0 ? pagina : 0,
-    mensagemId:
-      typeof mensagemId === "number" && Number.isSafeInteger(mensagemId) && mensagemId > 0
-        ? mensagemId
-        : undefined,
+    aba: abaValida(aba) ? aba : "visao",
+    pagina: inteiro(pagina, 0),
+    indice: typeof indice === "number" && Number.isSafeInteger(indice) && indice >= 0 ? indice : undefined,
+    mensagemId: typeof mensagemId === "number" && Number.isSafeInteger(mensagemId) && mensagemId > 0 ? mensagemId : undefined,
   };
 }
 
@@ -125,6 +145,7 @@ export async function gravarUi(kv: HostKvApi, chatId: string, ui: UiAdmin): Prom
   await kv.put(CHAVE_UI(chatId), {
     aba: ui.aba,
     pagina: ui.pagina,
+    ...(ui.indice !== undefined ? { indice: ui.indice } : {}),
     ...(ui.mensagemId !== undefined ? { mensagemId: ui.mensagemId } : {}),
   });
 }
@@ -142,39 +163,40 @@ export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdm
   const ui = await lerUi(kv, chatId);
   const config = await garantirConfig(kv);
   const painel = await painelCarteira(kv);
-  if (ui.aba === "liveok") return telaLiveOk();
+  if (ui.aba === "liveok") return telaProducao();
   if (ui.aba === "contas") return telaContas(painel, ui.pagina);
-  if (ui.aba === "pix") return telaPix(painel, ui.pagina, config.modo);
-  if (ui.aba === "ledger") return telaLedger(painel, ui.pagina);
-  if (ui.aba === "config") return telaConfig(config);
-  return telaVisao(painel, config);
+  if (ui.aba === "pix") return telaPix(painel, ui.pagina, config.modo, await contarAgendamentosAtivos(kv));
+  if (ui.aba === "ledger") return telaMovimento(painel, ui.pagina);
+  if (ui.aba === "config") return telaParametros(config);
+  if (ui.aba === "ficha") return telaFicha(painel, ui.indice ?? 0);
+  if (ui.aba === "extrato") return telaExtrato(kv, painel, ui.indice ?? 0);
+  return telaResumo(painel, config, await contarAgendamentosAtivos(kv));
 }
 
 export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string): Promise<ResultadoAdmin> {
   await garantirConfig(kv);
   const acao = parseAcao(dados);
-  if (acao === undefined) {
-    return { tela: await montarTela(kv, chatId), aviso: "Botão inválido." };
-  }
+  if (acao === undefined) return { tela: await montarTela(kv, chatId), aviso: "Operação inválida." };
   if (acao.tipo === "cancelar") {
     await kv.delete(CHAVE_PENDENTE(chatId));
     const ui = await lerUi(kv, chatId);
-    await gravarUi(kv, chatId, { ...ui, aba: ui.aba === "liveok" ? "visao" : ui.aba });
-    return { tela: await montarTela(kv, chatId), aviso: "Cancelado." };
+    await gravarUi(kv, chatId, { ...ui, aba: ui.aba === "liveok" ? "visao" : ui.aba === "ficha" || ui.aba === "extrato" ? "contas" : ui.aba });
+    return { tela: await montarTela(kv, chatId), aviso: "Operação cancelada." };
   }
   if (acao.tipo === "aba") {
     await kv.delete(CHAVE_PENDENTE(chatId));
-    await gravarUi(kv, chatId, { aba: acao.aba, pagina: acao.pagina ?? 0 });
+    const ui = await lerUi(kv, chatId);
+    await gravarUi(kv, chatId, { ...ui, aba: acao.aba, pagina: acao.pagina ?? 0, indice: acao.indice ?? ui.indice });
     return { tela: await montarTela(kv, chatId) };
   }
   if (acao.tipo === "atualizar") {
-    return { tela: await montarTela(kv, chatId), aviso: "Atualizado." };
+    return { tela: await montarTela(kv, chatId), aviso: "Posição atualizada." };
   }
   if (acao.tipo === "modo") {
     if (acao.modo === "sandbox") {
       await gravarConfig(kv, { modo: "sandbox" });
       await gravarUi(kv, chatId, { aba: "visao", pagina: 0 });
-      return { tela: await montarTela(kv, chatId), aviso: "Modo sandbox.", atualizarPerfil: true };
+      return { tela: await montarTela(kv, chatId), aviso: "Ambiente: homologação.", atualizarPerfil: true };
     }
     if (acao.modo === "live?") {
       await gravarUi(kv, chatId, { aba: "liveok", pagina: 0 });
@@ -184,7 +206,7 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
     await gravarUi(kv, chatId, { aba: "visao", pagina: 0 });
     return {
       tela: await montarTela(kv, chatId),
-      aviso: "Modo live. Gateway e regulação continuam por sua conta.",
+      aviso: "Ambiente: produção. A liquidação depende do convênio contratado.",
       atualizarPerfil: true,
     };
   }
@@ -196,34 +218,56 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
     const atual = configAtual();
     await gravarConfig(kv, { [acao.campo]: !atual[acao.campo] });
     await gravarUi(kv, chatId, { aba: "config", pagina: 0 });
-    return { tela: await montarTela(kv, chatId), aviso: "Configuração atualizada.", atualizarPerfil: true };
+    return { tela: await montarTela(kv, chatId), aviso: "Parametrização atualizada.", atualizarPerfil: true };
   }
   if (acao.tipo === "bloquear") {
     const painel = await painelCarteira(kv);
     const conta = painel.contas[acao.indice];
-    if (conta === undefined) return { tela: await montarTela(kv, chatId), aviso: "Conta não encontrada." };
+    if (conta === undefined) return { tela: await montarTela(kv, chatId), aviso: "Conta não localizada." };
     const bloquear = conta.status !== "bloqueada";
     await bloquearConta(kv, conta.chatId, bloquear);
-    await gravarUi(kv, chatId, { aba: "contas", pagina: Math.floor(acao.indice / PAGE) });
+    await gravarUi(kv, chatId, { aba: "ficha", pagina: 0, indice: acao.indice });
     return {
       tela: await montarTela(kv, chatId),
-      aviso: bloquear ? `Conta ${conta.numero} bloqueada.` : `Conta ${conta.numero} liberada.`,
+      aviso: bloquear ? `Conta ${conta.numero} bloqueada.` : `Conta ${conta.numero} desbloqueada.`,
+    };
+  }
+  if (acao.tipo === "cartao") {
+    const painel = await painelCarteira(kv);
+    const conta = painel.contas[acao.indice];
+    if (conta === undefined) return { tela: await montarTela(kv, chatId), aviso: "Conta não localizada." };
+    await bloquearCartaoGerencia(kv, conta.chatId, !conta.cartaoBloqueado);
+    await gravarUi(kv, chatId, { aba: "ficha", pagina: 0, indice: acao.indice });
+    return {
+      tela: await montarTela(kv, chatId),
+      aviso: conta.cartaoBloqueado ? `Cartão ${conta.numero} liberado.` : `Cartão ${conta.numero} bloqueado.`,
+    };
+  }
+  if (acao.tipo === "cancelar_pix") {
+    const painel = await painelCarteira(kv);
+    const cobranca = painel.cobrancas[acao.indice];
+    if (cobranca === undefined) return { tela: await montarTela(kv, chatId), aviso: "Cobrança não localizada." };
+    const cancelada = await cancelarCobrancaAberta(kv, cobranca.id);
+    await gravarUi(kv, chatId, { aba: "pix", pagina: Math.floor(acao.indice / PAGE) });
+    return {
+      tela: await montarTela(kv, chatId),
+      aviso: cancelada === undefined ? "Cobrança não estava em aberto." : "Cobrança cancelada.",
     };
   }
   const painel = await painelCarteira(kv);
   const cobranca = painel.cobrancas[acao.indice];
-  if (cobranca === undefined) return { tela: await montarTela(kv, chatId), aviso: "Cobrança não encontrada." };
-  if (!emSandbox()) return { tela: await montarTela(kv, chatId), aviso: "Confirmar PIX só existe em sandbox." };
+  if (cobranca === undefined) return { tela: await montarTela(kv, chatId), aviso: "Cobrança não localizada." };
+  if (!emSandbox()) return { tela: await montarTela(kv, chatId), aviso: "A liquidação manual só existe em homologação." };
   const resultado = await confirmarCobrancaSandbox(kv, cobranca.id);
   await gravarUi(kv, chatId, { aba: "pix", pagina: Math.floor(acao.indice / PAGE) });
   if (resultado.estado === "novo") {
     return {
       tela: await montarTela(kv, chatId),
-      aviso: "PIX confirmado.",
+      aviso: "Liquidação registrada.",
       avisoCliente: { chatId: resultado.chatId, texto: resultado.texto },
     };
   }
-  return { tela: await montarTela(kv, chatId), aviso: `Não confirmou (${resultado.estado}).` };
+  return { tela: await montarTela(kv, chatId), aviso: `Liquidação não efetivada (${rotuloEstado(resultado.estado)}).` };
 }
 
 export async function aplicarTextoAdmin(
@@ -234,25 +278,42 @@ export async function aplicarTextoAdmin(
   const campo = await lerPendente(kv, chatId);
   if (campo === undefined) return undefined;
   await garantirConfig(kv);
+  if (campo === "busca") {
+    const painel = await painelCarteira(kv);
+    const achadas = filtrarContas(painel.contas, texto);
+    await kv.delete(CHAVE_PENDENTE(chatId));
+    if (achadas.length === 0) {
+      await gravarUi(kv, chatId, { aba: "contas", pagina: 0 });
+      return { tela: await montarTela(kv, chatId), aviso: "Nenhuma conta encontrada." };
+    }
+    const indice = painel.contas.findIndex((item) => item.chatId === achadas[0].chatId);
+    await gravarUi(kv, chatId, { aba: achadas.length === 1 ? "ficha" : "contas", pagina: 0, indice });
+    return {
+      tela: achadas.length === 1 ? telaFicha(painel, indice) : telaContasFiltradas(painel, achadas),
+      aviso: achadas.length === 1 ? `Conta ${achadas[0].numero}.` : `${achadas.length} contas encontradas.`,
+    };
+  }
   const pedido = pedidoDoTexto(campo, texto, chatId);
   if (pedido === undefined) {
-    return { tela: { ...telaPendente(campo), aviso: "Valor inválido. Digite de novo." } };
+    return { tela: { ...telaPendente(campo), aviso: "Valor inválido. Informe novamente." } };
   }
   await gravarConfig(kv, pedido);
   await kv.delete(CHAVE_PENDENTE(chatId));
   await gravarUi(kv, chatId, { aba: "config", pagina: 0 });
   return {
     tela: await montarTela(kv, chatId),
-    aviso: "Configuração salva.",
+    aviso: "Parametrização gravada.",
     atualizarPerfil: campo === "nomeExibido" || campo === "webappUrl" || campo === "chatsAdmin",
   };
 }
 
 export function parseAcao(dados: string):
-  | { tipo: "aba"; aba: AbaAdmin; pagina?: number }
+  | { tipo: "aba"; aba: AbaAdmin; pagina?: number; indice?: number }
   | { tipo: "modo"; modo: "sandbox" | "live" | "live?" }
   | { tipo: "bloquear"; indice: number }
   | { tipo: "pagar"; indice: number }
+  | { tipo: "cancelar_pix"; indice: number }
+  | { tipo: "cartao"; indice: number }
   | { tipo: "pedir"; campo: CampoPendente }
   | { tipo: "toggle"; campo: "prefixoThialinha" | "botaoMiniApp" }
   | { tipo: "cancelar" }
@@ -267,6 +328,7 @@ export function parseAcao(dados: string):
   if (dados === "a:r") return { tipo: "atualizar" };
   if (dados === "a:t:p") return { tipo: "toggle", campo: "prefixoThialinha" };
   if (dados === "a:t:b") return { tipo: "toggle", campo: "botaoMiniApp" };
+  if (dados === "a:q") return { tipo: "pedir", campo: "busca" };
   const aba = dados.match(/^a:([cpl]):(\d+)$/) ?? dados.match(/^a:([cpl])$/);
   if (aba !== null) {
     const letra = aba[1];
@@ -281,11 +343,33 @@ export function parseAcao(dados: string):
     if (campo === undefined) return undefined;
     return { tipo: "pedir", campo };
   }
-  const item = dados.match(/^a:([bx]):(\d+)$/);
+  const item = dados.match(/^a:([bxdejy]):(\d+)$/);
   if (item === null) return undefined;
   const indice = Number(item[2]);
   if (!Number.isSafeInteger(indice) || indice < 0 || indice > 10_000) return undefined;
-  return item[1] === "b" ? { tipo: "bloquear", indice } : { tipo: "pagar", indice };
+  if (item[1] === "b") return { tipo: "bloquear", indice };
+  if (item[1] === "x") return { tipo: "pagar", indice };
+  if (item[1] === "y") return { tipo: "cancelar_pix", indice };
+  if (item[1] === "j") return { tipo: "cartao", indice };
+  if (item[1] === "d") return { tipo: "aba", aba: "ficha", indice };
+  return { tipo: "aba", aba: "extrato", indice };
+}
+
+function abaValida(valor: unknown): valor is AbaAdmin {
+  return (
+    valor === "visao" ||
+    valor === "contas" ||
+    valor === "pix" ||
+    valor === "ledger" ||
+    valor === "config" ||
+    valor === "liveok" ||
+    valor === "ficha" ||
+    valor === "extrato"
+  );
+}
+
+function inteiro(valor: unknown, padrao: number): number {
+  return typeof valor === "number" && Number.isSafeInteger(valor) && valor >= 0 ? valor : padrao;
 }
 
 function tokenConfere(recebido: string, esperado: string): boolean {
@@ -297,11 +381,12 @@ function tokenConfere(recebido: string, esperado: string): boolean {
 
 async function lerPendente(kv: HostKvApi, chatId: string): Promise<CampoPendente | undefined> {
   const valor = await kv.get(CHAVE_PENDENTE(chatId));
+  if (valor === "busca") return "busca";
   if (typeof valor !== "string") return undefined;
-  return (Object.values(CAMPOS) as string[]).includes(valor) ? (valor as CampoPendente) : undefined;
+  return (Object.values(CAMPOS) as string[]).includes(valor) ? (valor as Exclude<CampoPendente, "busca">) : undefined;
 }
 
-function pedidoDoTexto(campo: CampoPendente, texto: string, chatId: string): Record<string, unknown> | undefined {
+function pedidoDoTexto(campo: Exclude<CampoPendente, "busca">, texto: string, chatId: string): Record<string, unknown> | undefined {
   const limpo = texto.trim();
   if (limpo.length === 0) return undefined;
   if (campo === "taxaCentavos" || campo === "limiteCentavos") {
@@ -329,46 +414,69 @@ function nav(aba: AbaAdmin): BotaoAdmin[][] {
     callback_data: dados,
   });
   return [
-    [marca("visao", "Visão", "a:v"), marca("contas", "Contas", "a:c"), marca("pix", "PIX", "a:p")],
-    [marca("ledger", "Ledger", "a:l"), marca("config", "Config", "a:g"), { text: "Atualizar", callback_data: "a:r" }],
+    [marca("visao", "Painel", "a:v"), marca("contas", "Contas", "a:c"), marca("pix", "PIX", "a:p")],
+    [marca("ledger", "Movimento", "a:l"), marca("config", "Tarifas", "a:g"), { text: "Atualizar", callback_data: "a:r" }],
   ];
 }
 
-function telaVisao(
+function telaResumo(
   painel: Awaited<ReturnType<typeof painelCarteira>>,
   config: ReturnType<typeof configAtual>,
+  agendados: number,
 ): TelaAdmin {
+  const ativas = painel.contas.filter((item) => item.status === "ativa").length;
+  const bloqueadas = painel.contas.length - ativas;
+  const cartoes = painel.contas.filter((item) => item.cartaoBloqueado).length;
+  const abertas = painel.cobrancas.filter((item) => item.status === "aberta");
+  const volume = volumeDoDia(painel.ledger);
   const texto = [
-    "LINHABANK · Administração",
-    "Painel com botões, neste chat. Sem a Thialinha.",
+    "LINHABANK",
+    "Gerência de contas",
     "",
-    `Modo: ${config.modo}`,
-    `Saldo agregado: R$ ${reaisDe(painel.totalCentavos)}`,
-    `Contas: ${painel.contas.length} · Persistência: ${painel.sql ? "SQL" : "KV"}`,
-    `Gateway: ${gatewayConfigurada() ? "configurada" : "não"} · PSP: ${pspAtual().nome}`,
-    `Admins: ${config.chatsAdmin.length > 0 ? config.chatsAdmin : "nenhum"}`,
+    `Ambiente: ${config.modo === "live" ? "produção" : "homologação"}`,
+    `Liquidação PIX: ${gatewayConfigurada() ? "convênio ativo" : "convênio não contratado"}`,
+    `Custódia: R$ ${reaisDe(painel.totalCentavos)}`,
+    `Contas: ${ativas} ativa(s) · ${bloqueadas} bloqueada(s)`,
+    `PIX em aberto: ${abertas.length} · R$ ${reaisDe(somaAbertas(painel))}`,
+    `Movimento de hoje: + R$ ${reaisDe(volume.credito)}  − R$ ${reaisDe(volume.debito)}`,
+    `PIX agendados: ${agendados} · Cartões bloqueados: ${cartoes}`,
+    `Base: ${painel.sql ? "contábil SQL" : "contábil interna"}`,
   ].join("\n");
   return {
     texto,
     teclado: [
       ...nav("visao"),
       [
-        { text: config.modo === "sandbox" ? "• Sandbox" : "Sandbox", callback_data: "a:ms" },
-        { text: config.modo === "live" ? "• Live" : "Live", callback_data: "a:ml" },
+        {
+          text: config.modo === "sandbox" ? "• Homologação" : "Homologação",
+          callback_data: "a:ms",
+        },
+        {
+          text: config.modo === "live" ? "• Produção" : "Produção",
+          callback_data: "a:ml",
+        },
       ],
     ],
   };
 }
 
-function telaLiveOk(): TelaAdmin {
+function somaAbertas(painel: Awaited<ReturnType<typeof painelCarteira>>): number {
+  return painel.cobrancas
+    .filter((item) => item.status === "aberta")
+    .reduce((soma, item) => soma + item.valorCentavos, 0);
+}
+
+function telaProducao(): TelaAdmin {
   return {
     texto: [
-      "Confirmar modo live?",
-      "Isso não liga um PSP de produção sozinho. Gateway, segurança e regulação continuam por fora.",
+      "Alterar ambiente para produção",
+      "",
+      "A mudança não contrata liquidação, correspondent banking nem habilitação regulatória.",
+      "Confirme somente se o convênio e os controles internos já estiverem vigentes.",
     ].join("\n"),
     teclado: [
       [
-        { text: "Confirmar live", callback_data: "a:my" },
+        { text: "Confirmar produção", callback_data: "a:my" },
         { text: "Cancelar", callback_data: "a:z" },
       ],
     ],
@@ -379,20 +487,102 @@ function telaContas(painel: Awaited<ReturnType<typeof painelCarteira>>, pagina: 
   const fatia = paginar(painel.contas, pagina);
   const linhas =
     fatia.itens.length === 0
-      ? ["Nenhuma conta."]
+      ? ["Nenhuma conta corrente."]
       : fatia.itens.map((conta, i) => {
           const indice = fatia.inicio + i;
-          return `${indice + 1}. ${conta.numero} · ${conta.nome} · R$ ${conta.saldo} · ${conta.status}`;
+          return `${indice + 1}. ${conta.numero}  ${conta.nome}\n    R$ ${conta.saldo}  ·  ${rotuloStatus(conta.status)}${conta.cartaoBloqueado ? "  ·  cartão bloqueado" : ""}`;
         });
-  const acoes: BotaoAdmin[][] = fatia.itens.map((conta, i) => [
-    {
-      text: conta.status === "bloqueada" ? `Liberar ${conta.numero}` : `Bloquear ${conta.numero}`,
-      callback_data: `a:b:${fatia.inicio + i}`,
-    },
-  ]);
+  const acoes: BotaoAdmin[][] = fatia.itens.map((conta, i) => {
+    const indice = fatia.inicio + i;
+    return [
+      { text: `Ficha ${conta.numero}`, callback_data: `a:d:${indice}` },
+      {
+        text: conta.status === "bloqueada" ? "Desbloquear" : "Bloquear",
+        callback_data: `a:b:${indice}`,
+      },
+    ];
+  });
   return {
-    texto: ["Contas", ...linhas, fatia.rodape].filter((item) => item.length > 0).join("\n"),
-    teclado: [...nav("contas"), ...acoes, ...fatia.teclado("c")],
+    texto: ["Contas correntes  ·  agência 0001", "", ...linhas, fatia.rodape].filter((item) => item.length > 0).join("\n"),
+    teclado: [...nav("contas"), [{ text: "Localizar conta", callback_data: "a:q" }], ...acoes, ...fatia.teclado("c")],
+  };
+}
+
+function telaContasFiltradas(
+  painel: Awaited<ReturnType<typeof painelCarteira>>,
+  achadas: ContaPainel[],
+): TelaAdmin {
+  const linhas = achadas.slice(0, 8).map((conta) => {
+    const indice = painel.contas.findIndex((item) => item.chatId === conta.chatId);
+    return `${conta.numero}  ${conta.nome}  ·  R$ ${conta.saldo}  ·  ${rotuloStatus(conta.status)}`;
+  });
+  const acoes: BotaoAdmin[][] = achadas.slice(0, 8).map((conta) => {
+    const indice = painel.contas.findIndex((item) => item.chatId === conta.chatId);
+    return [{ text: `Ficha ${conta.numero}`, callback_data: `a:d:${indice}` }];
+  });
+  return {
+    texto: ["Resultado da localidade", "", ...linhas].join("\n"),
+    teclado: [...nav("contas"), ...acoes],
+  };
+}
+
+function telaFicha(painel: Awaited<ReturnType<typeof painelCarteira>>, indice: number): TelaAdmin {
+  const conta = painel.contas[indice];
+  if (conta === undefined) {
+    return { texto: "Conta não localizada.", teclado: nav("contas") };
+  }
+  const texto = [
+    "Ficha cadastral",
+    "",
+    `Agência ${conta.agencia}  Conta ${conta.numero}`,
+    `Titular: ${conta.nome}`,
+    `Situação: ${rotuloStatus(conta.status)}`,
+    `Saldo: R$ ${conta.saldo}`,
+    `Chave interna: ${conta.chaveInterna}`,
+    `Cartão virtual: **** ${conta.cartaoFinal}  ·  ${conta.cartaoBloqueado ? "bloqueado" : "liberado"}`,
+    `Abertura: ${quando(conta.aceitouEm)}`,
+  ].join("\n");
+  return {
+    texto,
+    teclado: [
+      ...nav("contas"),
+      [
+        {
+          text: conta.status === "bloqueada" ? "Desbloquear conta" : "Bloquear conta",
+          callback_data: `a:b:${indice}`,
+        },
+      ],
+      [
+        {
+          text: conta.cartaoBloqueado ? "Liberar cartão" : "Bloquear cartão",
+          callback_data: `a:j:${indice}`,
+        },
+        { text: "Extrato", callback_data: `a:e:${indice}` },
+      ],
+      [{ text: "Voltar às contas", callback_data: "a:c" }],
+    ],
+  };
+}
+
+async function telaExtrato(
+  kv: HostKvApi,
+  painel: Awaited<ReturnType<typeof painelCarteira>>,
+  indice: number,
+): Promise<TelaAdmin> {
+  const conta = painel.contas[indice];
+  if (conta === undefined) return { texto: "Conta não localizada.", teclado: nav("contas") };
+  const lista = await operarConta(kv, conta.chatId, `gerencia:extrato:${conta.chatId}`, { acao: "extrato" });
+  const movimentos = (lista.extrato ?? []).slice(-12).reverse();
+  const linhas =
+    movimentos.length === 0
+      ? ["Sem lançamentos."]
+      : movimentos.map((item) => {
+          const sinal = tipoCredito(item.tipo) ? "+" : "−";
+          return `${quando(item.em)}  ${rotuloTipo(item.tipo)}  ${sinal} R$ ${item.valor}${item.comprovante ? `\n    ${item.comprovante}` : ""}`;
+        });
+  return {
+    texto: [`Extrato  ·  ${conta.numero}  ${conta.nome}`, `Saldo R$ ${conta.saldo}`, "", ...linhas].join("\n"),
+    teclado: [...nav("contas"), [{ text: "Voltar à ficha", callback_data: `a:d:${indice}` }]],
   };
 }
 
@@ -400,90 +590,117 @@ function telaPix(
   painel: Awaited<ReturnType<typeof painelCarteira>>,
   pagina: number,
   modo: string,
+  agendados: number,
 ): TelaAdmin {
   const fatia = paginar(painel.cobrancas, pagina);
   const linhas =
     fatia.itens.length === 0
-      ? ["Nenhuma cobrança."]
-      : fatia.itens.map((item, i) => `${fatia.inicio + i + 1}. ${item.id} · R$ ${item.valor} · ${item.status}`);
+      ? ["Nenhuma cobrança PIX."]
+      : fatia.itens.map((item, i) => {
+          const conta = painel.contas.find((c) => c.chatId === item.chatId);
+          return `${fatia.inicio + i + 1}. R$ ${item.valor}  ·  ${rotuloCobranca(item.status)}\n    ${conta?.numero ?? item.chatId}  ·  ${item.txid}`;
+        });
   const acoes: BotaoAdmin[][] = [];
-  if (modo === "sandbox") {
-    for (let i = 0; i < fatia.itens.length; i += 1) {
-      const item = fatia.itens[i];
-      if (item.status !== "aberta") continue;
-      acoes.push([{ text: `Confirmar PIX R$ ${item.valor}`, callback_data: `a:x:${fatia.inicio + i}` }]);
-    }
+  for (let i = 0; i < fatia.itens.length; i += 1) {
+    const item = fatia.itens[i];
+    if (item.status !== "aberta") continue;
+    const indice = fatia.inicio + i;
+    const row: BotaoAdmin[] = [{ text: `Cancelar ${item.valor}`, callback_data: `a:y:${indice}` }];
+    if (modo === "sandbox") row.unshift({ text: `Liquidar R$ ${item.valor}`, callback_data: `a:x:${indice}` });
+    acoes.push(row);
   }
   return {
-    texto: ["PIX / cobranças", ...linhas, fatia.rodape].filter((item) => item.length > 0).join("\n"),
+    texto: [
+      "Tesouraria PIX",
+      `Agendamentos ativos: ${agendados}`,
+      `Transferência entre contas LinhaBank: isenta`,
+      "",
+      ...linhas,
+      fatia.rodape,
+    ]
+      .filter((item) => item.length > 0)
+      .join("\n"),
     teclado: [...nav("pix"), ...acoes, ...fatia.teclado("p")],
   };
 }
 
-function telaLedger(painel: Awaited<ReturnType<typeof painelCarteira>>, pagina: number): TelaAdmin {
+function telaMovimento(painel: Awaited<ReturnType<typeof painelCarteira>>, pagina: number): TelaAdmin {
   const fatia = paginar(painel.ledger, pagina);
   const linhas =
     fatia.itens.length === 0
       ? ["Sem lançamentos."]
-      : fatia.itens.map(
-          (item) => `${item.em} · ${item.tipo} · R$ ${item.valor} · ${item.conta} · ${item.comprovante ?? "—"}`,
-        );
+      : fatia.itens.map((item) => {
+          const conta = painel.contas.find((c) => c.chatId === item.conta);
+          const sinal = item.valorCentavos >= 0 ? "+" : "−";
+          return `${quando(item.em)}  ${rotuloTipo(item.tipo)}  ${sinal} R$ ${item.valor}\n    ${conta?.numero ?? item.conta}  ·  ${item.comprovante ?? "s/ comprovante"}`;
+        });
   return {
-    texto: ["Ledger", ...linhas, fatia.rodape].filter((item) => item.length > 0).join("\n"),
+    texto: ["Movimentação  ·  horário de Brasília", "", ...linhas, fatia.rodape].filter((item) => item.length > 0).join("\n"),
     teclado: [...nav("ledger"), ...fatia.teclado("l")],
   };
 }
 
-function telaConfig(config: ReturnType<typeof configAtual>): TelaAdmin {
+function telaParametros(config: ReturnType<typeof configAtual>): TelaAdmin {
+  const amostra = taxaPixExternoCentavos(10_000);
   const texto = [
-    "Configuração",
-    `Nome: ${config.nomeExibido}`,
-    `Chave PIX: ${config.chaveRecebimento || "—"}`,
-    `Cidade: ${config.cidadeRecebimento}`,
-    `Taxa externa: ${config.taxaCentavos} centavos + ${config.taxaPercentual}%`,
-    `Limite: ${config.limiteCentavos} centavos`,
-    `Prefixo Thialinha: ${config.prefixoThialinha ? "ligado" : "desligado"}`,
-    `Botão mini-app: ${config.botaoMiniApp ? "ligado" : "desligado"}`,
-    `URL mini-app: ${config.webappUrl || "—"}`,
-    `Admins: ${config.chatsAdmin || "—"}`,
+    "Parametrização operacional",
     "",
-    "PIX entre contas LinhaBank permanece sem taxa.",
+    `Instituição: ${config.nomeExibido}`,
+    `Chave de recebimento: ${config.chaveRecebimento || "não informada"}`,
+    `Praça: ${config.cidadeRecebimento}`,
+    `Tarifa PIX externo: R$ ${reaisDe(config.taxaCentavos)} + ${config.taxaPercentual}%`,
+    `Exemplo em R$ 100,00: R$ ${reaisDe(amostra)}`,
+    "Tarifa PIX interno: isento",
+    `Limite por operação: R$ ${reaisDe(config.limiteCentavos)}`,
+    `Identificação no atendimento: ${config.prefixoThialinha ? "ativa" : "inativa"}`,
+    `Canal digital: ${config.botaoMiniApp ? "ativo" : "inativo"}`,
+    `Endereço do canal: ${config.webappUrl || "não informado"}`,
+    `Operadores: ${config.chatsAdmin || "—"}`,
   ].join("\n");
   return {
     texto,
     teclado: [
       ...nav("config"),
       [
-        { text: "Nome", callback_data: "a:k:n" },
+        { text: "Instituição", callback_data: "a:k:n" },
         { text: "Chave PIX", callback_data: "a:k:h" },
-        { text: "Cidade", callback_data: "a:k:i" },
+        { text: "Praça", callback_data: "a:k:i" },
       ],
       [
-        { text: "Taxa R$", callback_data: "a:k:f" },
-        { text: "Taxa %", callback_data: "a:k:e" },
+        { text: "Tarifa R$", callback_data: "a:k:f" },
+        { text: "Tarifa %", callback_data: "a:k:e" },
         { text: "Limite", callback_data: "a:k:u" },
       ],
       [
-        { text: config.prefixoThialinha ? "Prefixo: on" : "Prefixo: off", callback_data: "a:t:p" },
-        { text: config.botaoMiniApp ? "Mini-app: on" : "Mini-app: off", callback_data: "a:t:b" },
+        { text: config.prefixoThialinha ? "Atendimento: on" : "Atendimento: off", callback_data: "a:t:p" },
+        { text: config.botaoMiniApp ? "Canal: on" : "Canal: off", callback_data: "a:t:b" },
       ],
       [
-        { text: "Admins", callback_data: "a:k:s" },
-        { text: "URL mini-app", callback_data: "a:k:w" },
+        { text: "Operadores", callback_data: "a:k:s" },
+        { text: "Canal digital", callback_data: "a:k:w" },
       ],
     ],
   };
 }
 
 function telaPendente(campo: CampoPendente): TelaAdmin {
+  if (campo === "busca") {
+    return {
+      texto: [
+        "Localizar conta",
+        "Informe o número da conta, o nome do titular ou a chave interna.",
+      ].join("\n"),
+      teclado: [[{ text: "Cancelar", callback_data: "a:z" }]],
+    };
+  }
   const atual = configAtual();
   const valor = String(atual[campo] ?? "");
   return {
     texto: [
       `Alterar ${ROTULO_CAMPO[campo]}`,
-      `Atual: ${valor.length > 0 ? valor : "—"}`,
+      `Vigente: ${valor.length > 0 ? valor : "não informado"}`,
       DICA_CAMPO[campo],
-      "Digite o novo valor neste chat.",
+      "Envie o novo valor.",
     ].join("\n"),
     teclado: [[{ text: "Cancelar", callback_data: "a:z" }]],
   };
@@ -507,9 +724,69 @@ function paginar<T>(itens: T[], pagina: number): {
     teclado: (letra) => {
       if (itens.length <= PAGE) return [];
       const row: BotaoAdmin[] = [];
-      if (p > 0) row.push({ text: "◀", callback_data: `a:${letra}:${p - 1}` });
-      if (p < max) row.push({ text: "▶", callback_data: `a:${letra}:${p + 1}` });
+      if (p > 0) row.push({ text: "Anterior", callback_data: `a:${letra}:${p - 1}` });
+      if (p < max) row.push({ text: "Próxima", callback_data: `a:${letra}:${p + 1}` });
       return row.length > 0 ? [row] : [];
     },
   };
+}
+
+function filtrarContas(contas: ContaPainel[], termo: string): ContaPainel[] {
+  const t = termo.trim().toLowerCase();
+  if (t.length === 0) return [];
+  return contas.filter(
+    (conta) =>
+      conta.numero === t ||
+      conta.chatId === t ||
+      conta.chaveInterna.toLowerCase() === t ||
+      conta.nome.toLowerCase().includes(t),
+  );
+}
+
+function volumeDoDia(ledger: { em: string; valorCentavos: number }[], agora = new Date()): { credito: number; debito: number } {
+  const hoje = dataHoraBrasil(agora).data;
+  let credito = 0;
+  let debito = 0;
+  for (const item of ledger) {
+    const instante = Date.parse(item.em);
+    if (!Number.isFinite(instante)) continue;
+    if (dataHoraBrasil(new Date(instante)).data !== hoje) continue;
+    if (item.valorCentavos >= 0) credito += item.valorCentavos;
+    else debito += Math.abs(item.valorCentavos);
+  }
+  return { credito, debito };
+}
+
+function quando(iso: string): string {
+  const instante = Date.parse(iso);
+  if (!Number.isFinite(instante)) return iso;
+  return formatarQuando(iso);
+}
+
+function rotuloTipo(tipo: string): string {
+  return ROTULO_MOVIMENTO[tipo] ?? tipo;
+}
+
+function rotuloStatus(status: string): string {
+  return status === "bloqueada" ? "bloqueada" : "ativa";
+}
+
+function rotuloCobranca(status: string): string {
+  if (status === "aberta") return "em aberto";
+  if (status === "paga") return "liquidada";
+  if (status === "cancelada") return "cancelada";
+  if (status === "expirada") return "expirada";
+  return status;
+}
+
+function rotuloEstado(estado: string): string {
+  if (estado === "repetido") return "já liquidada";
+  if (estado === "live") return "ambiente de produção";
+  if (estado === "conta_ausente") return "conta inexistente";
+  if (estado === "valor_invalido" || estado === "valor_divergente") return "valor divergente";
+  return estado;
+}
+
+function tipoCredito(tipo: string): boolean {
+  return tipo === "pix_recebido" || tipo === "deposito" || tipo === "transferencia_recebida" || tipo === "estorno";
 }
