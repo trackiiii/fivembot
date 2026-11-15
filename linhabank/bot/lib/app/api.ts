@@ -133,6 +133,9 @@ function mensagemDe(acao: AcaoApp, resultado: ResultadoOperacao): string | undef
     return `PIX para fora. Taxa R$ ${resultado.taxa}.`;
   }
   if (acao === "depositar" && resultado.ok && resultado.copiaECola !== undefined) {
+    if (resultado.taxa !== undefined && resultado.taxa !== "0,00") {
+      return `Pague R$ ${resultado.valor}. Taxa R$ ${resultado.taxa} já inclusa. Entram R$ ${resultado.liquido ?? resultado.valor} na conta.`;
+    }
     return "Pague este PIX. O saldo só entra depois da confirmação.";
   }
   if (acao === "enviar" && resultado.ok) {

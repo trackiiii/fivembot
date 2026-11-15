@@ -244,6 +244,7 @@ function lerCobrancaRegistro(item: Record<string, JsonValue> | undefined): Cobra
     id: item.id,
     chatId: item.chatId,
     valorCentavos: item.valorCentavos,
+    taxaCentavos: typeof item.taxaCentavos === "number" && Number.isSafeInteger(item.taxaCentavos) ? item.taxaCentavos : 0,
     txid: item.txid,
     copiaECola: item.copiaECola,
     status: item.status,

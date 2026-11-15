@@ -113,6 +113,14 @@ export function respostaBoleto(dados: { valor: string; descricao: string; saldo:
   return `Pagamento de R$ ${dados.valor} registrado: ${dados.descricao}. Saldo: R$ ${dados.saldo}.`;
 }
 
+export function textoDepositoPix(dados: { valor: string; taxa?: string; liquido?: string; copiaECola: string }): string {
+  const inclusa =
+    dados.taxa !== undefined && dados.taxa !== "0,00"
+      ? ` Taxa R$ ${dados.taxa} já inclusa. Entram R$ ${dados.liquido ?? dados.valor} na conta.`
+      : "";
+  return `Depósito de R$ ${dados.valor}.${inclusa} Pague este PIX. O saldo só entra depois da confirmação. Código copia e cola:\n${dados.copiaECola}`;
+}
+
 export function respostaPixRecebido(dados: {
   valor: string;
   saldo: string;

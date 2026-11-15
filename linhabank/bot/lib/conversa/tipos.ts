@@ -32,6 +32,7 @@ export type Slots = {
   nome?: string;
   saldo?: string;
   valor?: string;
+  taxa?: string;
   destino?: string;
   comprovante?: string;
   extrato?: string;

@@ -33,3 +33,16 @@ export function taxaPixExternoCentavos(valorCentavos: number): number {
 export function taxaPixExternoRecebimentoCentavos(valorCentavos: number): number {
   return detalheTaxaPixExterno(valorCentavos, "recebimento").totalCentavos;
 }
+
+export function depositoComTaxa(liquidoCentavos: number): {
+  liquidoCentavos: number;
+  taxaCentavos: number;
+  cobradoCentavos: number;
+} {
+  if (!Number.isSafeInteger(liquidoCentavos) || liquidoCentavos <= 0) {
+    return { liquidoCentavos: 0, taxaCentavos: 0, cobradoCentavos: 0 };
+  }
+  const taxaCentavos = Math.min(taxaPixExternoRecebimentoCentavos(liquidoCentavos), 500_000);
+  const cobradoCentavos = liquidoCentavos + taxaCentavos;
+  return { liquidoCentavos, taxaCentavos, cobradoCentavos };
+}

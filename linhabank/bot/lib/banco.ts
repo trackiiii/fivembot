@@ -33,7 +33,7 @@ import {
   upsertContaSql,
 } from "./store-sql.js";
 import { garantirConfig, configAtual } from "./config.js";
-import { taxaPixExternoCentavos, taxaPixExternoRecebimentoCentavos } from "./taxa.js";
+import { depositoComTaxa, taxaPixExternoCentavos, taxaPixExternoRecebimentoCentavos } from "./taxa.js";
 
 export const TERMOS_VERSAO = "2026-11-15-2";
 export const AGENCIA = "0001";
@@ -67,6 +67,7 @@ export type Cobranca = {
   id: string;
   chatId: string;
   valorCentavos: number;
+  taxaCentavos?: number;
   txid: string;
   copiaECola: string;
   status: "aberta" | "paga" | "expirada" | "cancelada";
@@ -127,6 +128,7 @@ export type ResultadoOperacao = {
   endToEndId?: string;
   comprovante?: string;
   taxa?: string;
+  liquido?: string;
   interno?: boolean;
   nome?: string;
   copiaECola?: string;
@@ -833,8 +835,13 @@ function lancamentosRecebimentoExterno(
   valorCentavos: number,
   tipo: "deposito" | "pix_recebido",
   descricao: string,
+  taxaInformada?: number,
 ): { movimentos: { chatId: string; tipo: TipoMovimento; valorCentavos: number; descricao: string }[]; taxa: number } {
-  const taxa = Math.min(taxaPixExternoRecebimentoCentavos(valorCentavos), valorCentavos);
+  const calculada =
+    taxaInformada !== undefined && Number.isSafeInteger(taxaInformada) && taxaInformada >= 0
+      ? taxaInformada
+      : taxaPixExternoRecebimentoCentavos(valorCentavos);
+  const taxa = Math.min(calculada, valorCentavos);
   const movimentos: { chatId: string; tipo: TipoMovimento; valorCentavos: number; descricao: string }[] = [
     { chatId, tipo, valorCentavos, descricao },
   ];
@@ -870,6 +877,7 @@ export async function creditarPixRecebido(
       aviso.valorCentavos,
       "deposito",
       (aviso.pagador?.trim().slice(0, 80) || "Depósito PIX") as string,
+      cobranca.taxaCentavos,
     );
     const movimento = await aplicar(kv, [destinoCobranca.chatId], `pix-in:${aviso.id}`, lancado.movimentos);
     if (!movimento.ok) return { estado: "conta_ausente" };
@@ -991,30 +999,39 @@ async function salvarCobranca(kv: HostKvApi, cobranca: Cobranca): Promise<void> 
   if (sqlDisponivel()) await gravarCobrancaSql(cobranca);
 }
 
+function resultadoDeposito(conta: Conta, cobranca: Cobranca, liquidoCentavos: number, taxaCentavos: number): ResultadoOperacao {
+  return {
+    ok: true,
+    valor: reaisDe(cobranca.valorCentavos),
+    taxa: reaisDe(taxaCentavos),
+    liquido: reaisDe(liquidoCentavos),
+    copiaECola: cobranca.copiaECola,
+    txid: cobranca.txid,
+    destino: cobranca.id,
+    saldo: reaisDe(conta.saldoCentavos),
+    conta: perfil(conta),
+  };
+}
+
 async function criarDeposito(kv: HostKvApi, conta: Conta, centavos: number, idOperacao: string): Promise<ResultadoOperacao> {
+  await garantirConfig(kv);
+  const { liquidoCentavos, taxaCentavos, cobradoCentavos } = depositoComTaxa(centavos);
   const abertas = sqlDisponivel() ? await listarCobrancasSql(conta.chatId, 10) : await listarCobrancas(kv, conta.chatId, 10);
-  const recente = abertas.find((item) => item.status === "aberta" && item.valorCentavos === centavos);
-  if (recente !== undefined) {
-    return {
-      ok: true,
-      valor: reaisDe(centavos),
-      copiaECola: recente.copiaECola,
-      txid: recente.txid,
-      destino: recente.id,
-      saldo: reaisDe(conta.saldoCentavos),
-      conta: perfil(conta),
-    };
-  }
+  const recente = abertas.find(
+    (item) => item.status === "aberta" && item.valorCentavos === cobradoCentavos && (item.taxaCentavos ?? 0) === taxaCentavos,
+  );
+  if (recente !== undefined) return resultadoDeposito(conta, recente, liquidoCentavos, taxaCentavos);
   const txid = novoTxid();
   const cobrancaId = `dep-${hashPayload(idOperacao).slice(0, 16)}`;
-  const gerada = await pspAtual().cobranca({ valorCentavos: centavos, txid, cobrancaId });
+  const gerada = await pspAtual().cobranca({ valorCentavos: cobradoCentavos, txid, cobrancaId });
   if ("ok" in gerada) {
     return { ok: false, motivo: "deposito_pendente", saldo: reaisDe(conta.saldoCentavos), conta: perfil(conta) };
   }
   const cobranca: Cobranca = {
     id: cobrancaId,
     chatId: conta.chatId,
-    valorCentavos: centavos,
+    valorCentavos: cobradoCentavos,
+    taxaCentavos,
     txid,
     copiaECola: gerada.copiaECola,
     status: "aberta",
@@ -1027,18 +1044,11 @@ async function criarDeposito(kv: HostKvApi, conta: Conta, centavos: number, idOp
     id: `dep-gerado:${cobranca.id}`,
     tipo: "deposito_gerado",
     conta: resumoCanal(conta),
-    valorCentavos: centavos,
+    valorCentavos: cobradoCentavos,
     cobrancaId: cobranca.id,
+    taxaCentavos,
   });
-  return {
-    ok: true,
-    valor: reaisDe(centavos),
-    copiaECola: cobranca.copiaECola,
-    txid: cobranca.txid,
-    destino: cobranca.id,
-    saldo: reaisDe(conta.saldoCentavos),
-    conta: perfil(conta),
-  };
+  return resultadoDeposito(conta, cobranca, liquidoCentavos, taxaCentavos);
 }
 
 export async function bloquearConta(
@@ -1090,7 +1100,16 @@ export type ContaPainel = {
 export async function painelCarteira(kv: HostKvApi): Promise<{
   contas: ContaPainel[];
   ledger: { em: string; tipo: string; valor: string; valorCentavos: number; conta: string; comprovante?: string }[];
-  cobrancas: { id: string; chatId: string; valor: string; valorCentavos: number; status: string; txid: string }[];
+  cobrancas: {
+    id: string;
+    chatId: string;
+    valor: string;
+    valorCentavos: number;
+    taxaCentavos: number;
+    liquido: string;
+    status: string;
+    txid: string;
+  }[];
   totalCentavos: number;
   sql: boolean;
 }> {
@@ -1129,6 +1148,8 @@ export async function painelCarteira(kv: HostKvApi): Promise<{
       chatId: item.chatId,
       valor: reaisDe(item.valorCentavos),
       valorCentavos: item.valorCentavos,
+      taxaCentavos: item.taxaCentavos ?? 0,
+      liquido: reaisDe(item.valorCentavos - (item.taxaCentavos ?? 0)),
       status: item.status,
       txid: item.txid,
     })),

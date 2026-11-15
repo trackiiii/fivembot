@@ -15,9 +15,9 @@ export const depositos: Fala[] = [
 ];
 
 export const depositoGerado: Fala[] = [
-  { id: "dpg-1", texto: "Prontinho{nome}! Depósito de R$ {valor}. Paga este PIX. O saldo só entra depois da confirmação. Copia e cola:\n{destino}" },
-  { id: "dpg-2", texto: "Separei seu PIX de R$ {valor}. Não precisa me mandar print. Quando confirmar, eu te aviso. Código:\n{destino}" },
-  { id: "dpg-3", texto: "Aqui está{nome}. R$ {valor} pra entrar na sua conta, depois da confirmação. Copia e cola:\n{destino}" },
+  { id: "dpg-1", texto: "Prontinho{nome}! Pague R$ {valor}.{taxa} Copia e cola:\n{destino}" },
+  { id: "dpg-2", texto: "Separei seu PIX de R$ {valor}.{taxa} Não precisa me mandar print. Código:\n{destino}" },
+  { id: "dpg-3", texto: "Aqui está{nome}. PIX de R$ {valor}.{taxa} Copia e cola:\n{destino}" },
 ];
 
 export const pendentes: Fala[] = [

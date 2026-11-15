@@ -16,6 +16,7 @@ import {
   RESPOSTA_DEPOSITO_PENDENTE,
   RESPOSTA_SEM_CONTA,
   movimentosDoDia,
+  textoDepositoPix,
   respostaContaAberta,
   respostaSaldo,
   respostaStartComConta,
@@ -308,7 +309,12 @@ async function atalhoCarteira(
     await enviarPadrao(deps.kv, atualizacao, RESPOSTA_DEPOSITO_PENDENTE);
     return true;
   }
-  const caption = `Depósito de R$ ${deposito.valor}. Pague este PIX. O saldo só entra depois da confirmação. Código copia e cola:\n${deposito.copiaECola}`;
+  const caption = textoDepositoPix({
+    valor: deposito.valor ?? "0,00",
+    taxa: deposito.taxa,
+    liquido: deposito.liquido,
+    copiaECola: deposito.copiaECola,
+  });
   const png = await pngCopiaECola(deposito.copiaECola);
   const foto = await enviarFoto(atualizacao.chatId, png, caption);
   if (!foto) await enviarTexto(atualizacao.chatId, caption, atualizacao.mensagemId);

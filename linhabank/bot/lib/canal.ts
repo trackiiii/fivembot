@@ -16,6 +16,7 @@ export type EventoCanal =
       conta: ContaCanal;
       valorCentavos: number;
       cobrancaId: string;
+      taxaCentavos?: number;
     }
   | {
       id: string;
@@ -65,7 +66,12 @@ export function textoMovimentoCanal(evento: EventoCanal): string {
   const valor = `R$ ${reais(evento.valorCentavos)}`;
   const titular = `${evento.conta.agencia} / ${evento.conta.numero}  ·  ${evento.conta.nome}`;
   if (evento.tipo === "deposito_gerado") {
-    return linhas("Depósito gerado", [`Conta ${titular}`, `Valor ${valor}`, `Cobrança ${evento.cobrancaId}`]);
+    return linhas("Depósito gerado", [
+      `Conta ${titular}`,
+      `Valor ${valor}`,
+      evento.taxaCentavos !== undefined && evento.taxaCentavos > 0 ? `Tarifa R$ ${reais(evento.taxaCentavos)} (já no PIX)` : "",
+      `Cobrança ${evento.cobrancaId}`,
+    ]);
   }
   if (evento.tipo === "deposito_recebido") {
     return linhas("Depósito recebido", [

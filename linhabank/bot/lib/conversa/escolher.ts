@@ -17,6 +17,7 @@ export function preencher(texto: string, slots: Slots): string {
     .replaceAll("{Nome}", nome ?? "")
     .replaceAll("{saldo}", slots.saldo ?? "")
     .replaceAll("{valor}", slots.valor ?? "")
+    .replaceAll("{taxa}", slots.taxa ?? "")
     .replaceAll("{destino}", slots.destino ?? "")
     .replaceAll("{comprovante}", slots.comprovante ?? "")
     .replaceAll("{extrato}", slots.extrato ?? "")
@@ -33,6 +34,7 @@ export function escolherFala(falas: Fala[], estado: EstadoFala, slots: Slots): F
     if (nome === undefined && (fala.texto.includes("{nome}") || fala.texto.includes("{Nome}"))) return false;
     if (slots.saldo === undefined && fala.texto.includes("{saldo}")) return false;
     if (slots.valor === undefined && fala.texto.includes("{valor}")) return false;
+    if (slots.taxa === undefined && fala.texto.includes("{taxa}")) return false;
     if (slots.extrato === undefined && fala.texto.includes("{extrato}")) return false;
     if (slots.pendencias === undefined && fala.texto.includes("{pendencias}")) return false;
     if (slots.comprovante === undefined && fala.texto.includes("{comprovante}")) return false;

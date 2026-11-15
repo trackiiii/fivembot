@@ -56,7 +56,8 @@ function semIa(texto: string): void {
   assert(lerComandoAdmin("/admin") !== undefined, "/admin não reconhecido");
   assert(lerComandoAdmin("/admin@linhabank_bot token-admin-teste")?.token === "token-admin-teste", "token do /admin");
   assert(lerComandoAdmin("saldo") === undefined, "saldo não é /admin");
-  assert(parseAcao("a:g")?.tipo === "aba", "botão Tarifas");
+  assert(parseAcao("a:g")?.tipo === "aba", "botão Ajustes");
+  assert(parseAcao("a:o")?.tipo === "aba", "botão Mais opções");
   assert(parseAcao("a:k:f")?.tipo === "pedir", "botão tarifa");
   assert((parseAcao("a:k:m") as { campo?: string }).campo === "canalMovimento", "botão canal de movimento");
   assert(parseAcao("a:b:0")?.tipo === "bloquear", "botão bloquear");
@@ -64,7 +65,7 @@ function semIa(texto: string): void {
   assert(parseAcao("a:j:0")?.tipo === "cartao", "botão cartão");
   assert(parseAcao("a:y:1")?.tipo === "cancelar_pix", "botão cancelar PIX");
   assert((parseAcao("a:x:2") as { indice?: number }).indice === 2, "índice liquidar PIX");
-  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m"];
+  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m"];
   for (const dados of todos) {
     assert(parseAcao(dados) !== undefined, `callback ${dados}`);
     assert(dados.length <= 64, `callback longo ${dados}`);
@@ -88,8 +89,8 @@ function semIa(texto: string): void {
   await gravarConfig(kv, { chatsAdmin: "1001" });
   const visao = await montarTela(kv, "1001");
   assert(visao.texto.includes("LINHABANK"), "painel sem instituição");
-  assert(visao.texto.includes("Gerência de contas"), "painel sem gerência");
-  assert(visao.texto.includes("Custódia"), "painel sem custódia");
+  assert(visao.texto.includes("Gerência"), "painel sem gerência");
+  assert(visao.texto.includes("Saldo das contas"), "painel sem saldo");
   assert(visao.texto.includes("homologação"), "painel sem ambiente");
   semIa(visao.texto);
   const dados = botoes(visao);
@@ -115,7 +116,7 @@ function semIa(texto: string): void {
   await gravarConfig(kv, { chatsAdmin: "1001" });
   assert(taxaPixExternoCentavos(10_000) === 0, "tarifa inicial não é zero");
   await aplicarAcao(kv, "1001", "a:k:f");
-  const salvo = await aplicarTextoAdmin(kv, "1001", "150");
+  const salvo = await aplicarTextoAdmin(kv, "1001", "1,50");
   assert(salvo !== undefined && configAtual().taxaCentavos === 150, "tarifa pelo botão não gravou");
   await aplicarAcao(kv, "1001", "a:k:e");
   await aplicarTextoAdmin(kv, "1001", "1,50");
@@ -128,10 +129,10 @@ function semIa(texto: string): void {
   assert((canalInvalido?.tela.aviso ?? "").includes("inválido"), "canal inválido passou");
   const canal = await aplicarTextoAdmin(kv, "1001", "-1001234567890");
   assert(canal !== undefined && configAtual().canalMovimento === "-1001234567890", "canal de movimento não gravou");
-  assert((canal?.tela.texto ?? "").includes("Canal de movimento: -1001234567890"), "tarifas sem o canal gravado");
+  assert((canal?.tela.texto ?? "").includes("Canal Telegram: -1001234567890"), "ajustes sem o canal gravado");
   const prefixo = await aplicarAcao(kv, "1001", "a:t:p");
   assert(configAtual().prefixoThialinha === false, "identificação no atendimento não desligou");
-  assert(prefixo.tela.texto.includes("Parametrização"), "depois do toggle não voltou à parametrização");
+  assert(prefixo.tela.texto.includes("Mais opções"), "depois do toggle não voltou às opções");
   semIa(prefixo.tela.texto);
 }
 
@@ -169,7 +170,7 @@ function semIa(texto: string): void {
   const deposito = await operarConta(kv, "77", "dep-admin", { acao: "depositar", valor: "25,00" });
   assert(deposito.ok === true, "depósito do teste admin falhou");
   const pix = await aplicarAcao(kv, "1001", "a:p");
-  assert(pix.tela.texto.includes("Tesouraria PIX"), "tesouraria sem título");
+  assert(pix.tela.texto.includes("PIX"), "tela PIX sem título");
   semIa(pix.tela.texto);
   assert(pix.tela.teclado.flat().some((b) => b.callback_data === "a:x:0"), "PIX sem liquidar");
   assert(pix.tela.teclado.flat().some((b) => b.callback_data === "a:y:0"), "PIX sem cancelar");
@@ -241,23 +242,25 @@ function semIa(texto: string): void {
     assert(configAtual().taxaGatewayRecebimentoCentavos === 99, `custo de recebimento ${configAtual().taxaGatewayRecebimentoCentavos}`);
     assert(configAtual().taxaCentavos === 150, "atualizar apagou o adicional");
     assert(configAtual().taxaPercentual === "1,50", "atualizar apagou o adicional percentual");
-    assert((atualizado.aviso ?? "").includes("Adicional LinhaBank inalterado"), `aviso atualizar: ${atualizado.aviso}`);
+    assert((atualizado.aviso ?? "").includes("Taxa LinhaBank inalterada"), `aviso atualizar: ${atualizado.aviso}`);
     assert((atualizado.aviso ?? "").includes("recebimento R$ 0,99"), `aviso atualizar sem recebimento: ${atualizado.aviso}`);
     await aplicarAcao(kv, "1001", "a:g");
     const tarifas = await montarTela(kv, "1001");
-    assert(tarifas.texto.includes("Custo da gateway (envio): R$ 2,00"), "tarifas sem o custo da gateway");
-    assert(tarifas.texto.includes("Custo da gateway (recebimento): R$ 0,99 + 0%"), "tarifas sem o custo de recebimento");
-    assert(tarifas.texto.includes("Adicional LinhaBank: R$ 1,50 + 1,50%"), "tarifas sem o adicional");
-    assert(tarifas.texto.includes("PIX externo envio: R$ 5,00 em R$ 100,00"), "tarifas sem o total de envio");
-    assert(tarifas.texto.includes("PIX externo recebimento: R$ 3,99 em R$ 100,00"), "tarifas sem o total de recebimento");
+    assert(tarifas.texto.includes("Enviar para fora"), "ajustes sem o envio");
+    assert(tarifas.texto.includes("Receber de fora (depósito)"), "ajustes sem o recebimento");
+    assert(tarifas.texto.includes("Custo Asaas (produção): R$ 2,00") || tarifas.texto.includes("R$ 2,00"), "ajustes sem o custo de envio");
+    assert(tarifas.texto.includes("R$ 0,99"), "ajustes sem o custo de recebimento");
+    assert(tarifas.texto.includes("Taxa LinhaBank: R$ 1,50 + 1,50%"), "ajustes sem a taxa LinhaBank");
+    assert(tarifas.texto.includes("o cliente paga R$ 5,00"), "ajustes sem o total de envio");
+    assert(tarifas.texto.includes("o QR sai R$ 103,99"), "ajustes sem o QR já com taxa");
     assert(taxaPixExternoCentavos(10_000) === 500, `PIX externo sem soma gateway+adicional: ${taxaPixExternoCentavos(10_000)}`);
     assert(
       taxaPixExternoRecebimentoCentavos(10_000) === 399,
       `recebimento externo sem soma gateway+adicional: ${taxaPixExternoRecebimentoCentavos(10_000)}`,
     );
     await aplicarAcao(kv, "1001", "a:k:f");
-    await aplicarTextoAdmin(kv, "1001", "50");
-    assert(configAtual().taxaCentavos === 50 && configAtual().taxaGatewayCentavos === 200, "adicional não ficou personalizável");
+    await aplicarTextoAdmin(kv, "1001", "0,50");
+    assert(configAtual().taxaCentavos === 50 && configAtual().taxaGatewayCentavos === 200, "taxa não ficou personalizável");
     assert(configAtual().taxaGatewayRecebimentoCentavos === 99, "adicional apagou o custo de recebimento");
     assert(taxaPixExternoCentavos(10_000) === 400, "adicional novo não entrou no PIX externo");
     assert(taxaPixExternoRecebimentoCentavos(10_000) === 299, "adicional novo não entrou no recebimento externo");

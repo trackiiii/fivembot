@@ -45,6 +45,10 @@ export async function responderLocal(
         categoria = gerado.motivo === "sem_conta" ? "cadastro" : "tecnico";
       } else {
         slots.valor = gerado.valor;
+        slots.taxa =
+          gerado.taxa !== undefined && gerado.taxa !== "0,00"
+            ? ` Taxa R$ ${gerado.taxa} já inclusa. Entram R$ ${gerado.liquido ?? gerado.valor} na conta.`
+            : " O saldo só entra depois da confirmação.";
         slots.destino = gerado.copiaECola;
         const fala = escolherFala(FALAS_DEPOSITO_GERADO, estado, slots);
         const textoFinal = preencher(fala.texto, slots);

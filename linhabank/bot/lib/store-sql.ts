@@ -196,10 +196,11 @@ export async function listarLedgerSql(limite = 40): Promise<Lancamento[]> {
 
 export async function gravarCobrancaSql(cobranca: Cobranca): Promise<void> {
   await sql(
-    `insert into cobrancas (id, chat_id, valor_centavos, txid, copia_e_cola, status, provedor, webhook_id, end_to_end_id, comprovante, criada_em, paga_em)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+    `insert into cobrancas (id, chat_id, valor_centavos, taxa_centavos, txid, copia_e_cola, status, provedor, webhook_id, end_to_end_id, comprovante, criada_em, paga_em)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      on conflict (id) do update set
        status = excluded.status,
+       taxa_centavos = excluded.taxa_centavos,
        webhook_id = excluded.webhook_id,
        end_to_end_id = excluded.end_to_end_id,
        comprovante = excluded.comprovante,
@@ -208,6 +209,7 @@ export async function gravarCobrancaSql(cobranca: Cobranca): Promise<void> {
       cobranca.id,
       cobranca.chatId,
       cobranca.valorCentavos,
+      cobranca.taxaCentavos ?? 0,
       cobranca.txid,
       cobranca.copiaECola,
       cobranca.status,
@@ -261,6 +263,7 @@ function cobrancaDe(row: Record<string, unknown> | undefined): Cobranca | undefi
     id: row.id,
     chatId: row.chat_id,
     valorCentavos: inteiro(row.valor_centavos as string | number),
+    taxaCentavos: inteiro((row.taxa_centavos as string | number | undefined) ?? 0),
     txid: row.txid,
     copiaECola: row.copia_e_cola,
     status: row.status,

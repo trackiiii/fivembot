@@ -234,13 +234,21 @@ async function saldoDe(kv: HostKvApi, chatId: string): Promise<number> {
   assert((await saldoDe(kv, "taxa-in")) === 851, `saldo líquido ${await saldoDe(kv, "taxa-in")}`);
   const deposito = await operarConta(kv, "taxa-in", "dep-taxa", { acao: "depositar", valor: "10,00" });
   assert(deposito.ok && deposito.txid !== undefined, "depósito com tarifa não gerou cobrança");
-  const pago = await creditarPixRecebido(kv, {
-    id: "wh-dep-taxa",
+  assert(deposito.valor === "11,49" && deposito.taxa === "1,49" && deposito.liquido === "10,00", `QR sem a tarifa: ${deposito.valor} / ${deposito.taxa}`);
+  const divergenteTaxa = await creditarPixRecebido(kv, {
+    id: "wh-dep-taxa-div",
     cobrancaId: deposito.destino,
     txid: deposito.txid,
     valorCentavos: 1_000,
   });
-  assert(pago.estado === "novo" && (await saldoDe(kv, "taxa-in")) === 1_702, "depósito liquidado não descontou a tarifa");
+  assert(divergenteTaxa.estado === "valor_divergente", "aceitou pagamento sem a tarifa");
+  const pago = await creditarPixRecebido(kv, {
+    id: "wh-dep-taxa",
+    cobrancaId: deposito.destino,
+    txid: deposito.txid,
+    valorCentavos: 1_149,
+  });
+  assert(pago.estado === "novo" && (await saldoDe(kv, "taxa-in")) === 1_851, `depósito liquidado não creditou o líquido: ${await saldoDe(kv, "taxa-in")}`);
   const destino = await abrir(kv, "taxa-int");
   const interno = await operarConta(kv, "taxa-in", "pix-int-taxa", {
     acao: "enviar_pix",

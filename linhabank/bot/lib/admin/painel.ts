@@ -24,7 +24,7 @@ export const CHAVE_UI = (chatId: string) => `linhabank:admin:ui:${chatId}`;
 export const CHAVE_PENDENTE = (chatId: string) => `linhabank:admin:pendente:${chatId}`;
 export const CHAVE_TAXAS_GATEWAY = "linhabank:taxas-gateway";
 
-export type AbaAdmin = "visao" | "contas" | "pix" | "ledger" | "config" | "liveok" | "ficha" | "extrato";
+export type AbaAdmin = "visao" | "contas" | "pix" | "ledger" | "config" | "mais" | "liveok" | "ficha" | "extrato";
 export type CampoPendente =
   | "nomeExibido"
   | "chaveRecebimento"
@@ -74,27 +74,27 @@ const CAMPOS: Record<string, Exclude<CampoPendente, "busca">> = {
 };
 
 const ROTULO_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
-  nomeExibido: "nome da instituição",
+  nomeExibido: "nome do banco",
   chaveRecebimento: "chave PIX de recebimento",
-  cidadeRecebimento: "praça da cobrança",
-  taxaCentavos: "adicional LinhaBank sobre a gateway, em centavos",
-  taxaPercentual: "adicional LinhaBank sobre a gateway, em percentual",
-  limiteCentavos: "limite por operação, em centavos",
-  webappUrl: "endereço HTTPS do canal digital",
-  chatsAdmin: "identificadores dos operadores, separados por vírgula",
-  canalMovimento: "identificador do canal de movimento no Telegram",
+  cidadeRecebimento: "cidade da cobrança",
+  taxaCentavos: "taxa LinhaBank, em reais",
+  taxaPercentual: "taxa LinhaBank, em percentual",
+  limiteCentavos: "limite por PIX, em reais",
+  webappUrl: "endereço HTTPS do aplicativo",
+  chatsAdmin: "chat id dos operadores, separados por vírgula",
+  canalMovimento: "canal de movimento no Telegram",
 };
 
 const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   nomeExibido: "2 a 32 caracteres.",
   chaveRecebimento: "E-mail, CPF, CNPJ, telefone ou chave aleatória.",
   cidadeRecebimento: "Até 15 letras, sem acento.",
-  taxaCentavos: "Ex.: 99 = R$ 0,99 a somar ao custo da gateway no envio e no recebimento externo. PIX interno permanece isento.",
-  taxaPercentual: "Ex.: 1,50. Soma-se ao custo da gateway no PIX externo de envio e de recebimento. Informe 0 para isentar o adicional percentual.",
-  limiteCentavos: "Ex.: 250000 = R$ 2.500,00.",
+  taxaCentavos: "Em reais. Ex.: 0,99 ou 1,50. Vale no envio e no depósito. PIX interno continua grátis. Envie 0 para zerar.",
+  taxaPercentual: "Ex.: 1,50. Vale no envio e no depósito. Envie 0 para zerar.",
+  limiteCentavos: "Em reais. Ex.: 2500,00.",
   webappUrl: "Opcional. Somente HTTPS.",
-  chatsAdmin: "Somente números. O operador atual permanece na lista.",
-  canalMovimento: "Chat id do canal (ex.: -1001234567890) ou @usuario. Envie - para voltar aos operadores.",
+  chatsAdmin: "Somente números. O seu chat permanece na lista.",
+  canalMovimento: "Chat id do canal (ex.: -1001234567890) ou @usuario. Envie - para avisar só os operadores.",
 };
 
 const ROTULO_MOVIMENTO: Record<string, string> = {
@@ -174,6 +174,7 @@ export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdm
   if (ui.aba === "pix") return telaPix(painel, ui.pagina, config.modo, await contarAgendamentosAtivos(kv));
   if (ui.aba === "ledger") return telaMovimento(painel, ui.pagina);
   if (ui.aba === "config") return telaParametros(config, await lerTaxasGateway(kv));
+  if (ui.aba === "mais") return telaMais(config);
   if (ui.aba === "ficha") return telaFicha(painel, ui.indice ?? 0);
   if (ui.aba === "extrato") return telaExtrato(kv, painel, ui.indice ?? 0);
   return telaResumo(painel, config, await contarAgendamentosAtivos(kv));
@@ -224,8 +225,8 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
   if (acao.tipo === "toggle") {
     const atual = configAtual();
     await gravarConfig(kv, { [acao.campo]: !atual[acao.campo] });
-    await gravarUi(kv, chatId, { aba: "config", pagina: 0 });
-    return { tela: await montarTela(kv, chatId), aviso: "Parametrização atualizada.", atualizarPerfil: true };
+    await gravarUi(kv, chatId, { aba: "mais", pagina: 0 });
+    return { tela: await montarTela(kv, chatId), aviso: "Ajuste gravado.", atualizarPerfil: true };
   }
   if (acao.tipo === "bloquear") {
     const painel = await painelCarteira(kv);
@@ -309,7 +310,7 @@ export async function aplicarTextoAdmin(
   await gravarUi(kv, chatId, { aba: "config", pagina: 0 });
   return {
     tela: await montarTela(kv, chatId),
-    aviso: "Parametrização gravada.",
+    aviso: "Ajuste gravado.",
     atualizarPerfil: campo === "nomeExibido" || campo === "webappUrl" || campo === "chatsAdmin",
   };
 }
@@ -328,6 +329,7 @@ export function parseAcao(dados: string):
   | undefined {
   if (dados === "a:v") return { tipo: "aba", aba: "visao" };
   if (dados === "a:g") return { tipo: "aba", aba: "config" };
+  if (dados === "a:o") return { tipo: "aba", aba: "mais" };
   if (dados === "a:ms") return { tipo: "modo", modo: "sandbox" };
   if (dados === "a:ml") return { tipo: "modo", modo: "live?" };
   if (dados === "a:my") return { tipo: "modo", modo: "live" };
@@ -369,6 +371,7 @@ function abaValida(valor: unknown): valor is AbaAdmin {
     valor === "pix" ||
     valor === "ledger" ||
     valor === "config" ||
+    valor === "mais" ||
     valor === "liveok" ||
     valor === "ficha" ||
     valor === "extrato"
@@ -397,8 +400,8 @@ function pedidoDoTexto(campo: Exclude<CampoPendente, "busca">, texto: string, ch
   const limpo = texto.trim();
   if (limpo.length === 0) return undefined;
   if (campo === "taxaCentavos" || campo === "limiteCentavos") {
-    const n = Number(limpo.replace(/\D/g, ""));
-    if (!Number.isSafeInteger(n)) return undefined;
+    const n = reaisParaCentavosCampo(limpo, campo === "limiteCentavos" ? 2_000_000 : 500_000);
+    if (n === undefined) return undefined;
     return { [campo]: n };
   }
   if (campo === "nomeExibido" && limpo.length < 2) return undefined;
@@ -428,9 +431,18 @@ function nav(aba: AbaAdmin): BotaoAdmin[][] {
     callback_data: dados,
   });
   return [
-    [marca("visao", "Painel", "a:v"), marca("contas", "Contas", "a:c"), marca("pix", "PIX", "a:p")],
-    [marca("ledger", "Movimento", "a:l"), marca("config", "Tarifas", "a:g"), { text: "Atualizar", callback_data: "a:r" }],
+    [marca("visao", "Início", "a:v"), marca("contas", "Contas", "a:c"), marca("pix", "PIX", "a:p")],
+    [marca("ledger", "Lançamentos", "a:l"), marca("config", "Ajustes", "a:g")],
   ];
+}
+
+function reaisParaCentavosCampo(texto: string, max: number): number | undefined {
+  const limpo = texto.trim().replace(/\s/g, "").replace(/^r\$/i, "");
+  const achado = limpo.match(/^(\d{1,7})(?:[.,](\d{1,2}))?$/);
+  if (achado === null) return undefined;
+  const total = Number(achado[1]) * 100 + Number((achado[2] ?? "").padEnd(2, "0"));
+  if (!Number.isSafeInteger(total) || total < 0 || total > max) return undefined;
+  return total;
 }
 
 function telaResumo(
@@ -445,18 +457,18 @@ function telaResumo(
   const volume = volumeDoDia(painel.ledger);
   const texto = [
     "LINHABANK",
-    "Gerência de contas",
+    "Gerência",
     "",
-    `Ambiente: ${config.modo === "live" ? "produção" : "homologação"}`,
-    `Liquidação PIX: ${rotuloLiquidacao()}`,
-    `Custódia: R$ ${reaisDe(painel.totalCentavos)}`,
+    `Saldo das contas: R$ ${reaisDe(painel.totalCentavos)}`,
     `Contas: ${ativas} ativa(s) · ${bloqueadas} bloqueada(s)`,
-    `PIX em aberto: ${abertas.length} · R$ ${reaisDe(somaAbertas(painel))}`,
-    `Movimento de hoje: + R$ ${reaisDe(volume.credito)}  − R$ ${reaisDe(volume.debito)}`,
-    `PIX agendados: ${agendados} · Cartões bloqueados: ${cartoes}`,
-    `Canal de movimento: ${config.canalMovimento || "operadores"}`,
-    `Base: ${painel.sql ? "contábil SQL" : "contábil interna"}`,
-  ].join("\n");
+    `PIX esperando pagamento: ${abertas.length} · R$ ${reaisDe(somaAbertas(painel))}`,
+    `Hoje: + R$ ${reaisDe(volume.credito)}  − R$ ${reaisDe(volume.debito)}`,
+    `PIX agendados: ${agendados}`,
+    cartoes > 0 ? `Cartões bloqueados: ${cartoes}` : "",
+    `Ambiente: ${config.modo === "live" ? "produção" : "homologação"} · ${rotuloLiquidacao()}`,
+  ]
+    .filter((item) => item.length > 0)
+    .join("\n");
   return {
     texto,
     teclado: [
@@ -613,7 +625,9 @@ function telaPix(
       ? ["Nenhuma cobrança PIX."]
       : fatia.itens.map((item, i) => {
           const conta = painel.contas.find((c) => c.chatId === item.chatId);
-          return `${fatia.inicio + i + 1}. R$ ${item.valor}  ·  ${rotuloCobranca(item.status)}\n    ${conta?.numero ?? item.chatId}  ·  ${item.txid}`;
+          const tarifa =
+            item.taxaCentavos > 0 ? `  ·  entra R$ ${item.liquido}` : "";
+          return `${fatia.inicio + i + 1}. R$ ${item.valor}${tarifa}  ·  ${rotuloCobranca(item.status)}\n    ${conta?.numero ?? item.chatId}  ·  ${item.txid}`;
         });
   const acoes: BotaoAdmin[][] = [];
   for (let i = 0; i < fatia.itens.length; i += 1) {
@@ -626,10 +640,10 @@ function telaPix(
   }
   return {
     texto: [
-      "Tesouraria PIX",
-      `Liquidação: ${rotuloLiquidacao()}`,
-      `Agendamentos ativos: ${agendados}`,
-      `Transferência entre contas LinhaBank: isenta`,
+      "PIX",
+      `Provedor: ${rotuloLiquidacao()}`,
+      `Agendamentos: ${agendados}`,
+      "Entre contas LinhaBank: grátis",
       "",
       ...linhas,
       fatia.rodape,
@@ -651,7 +665,7 @@ function telaMovimento(painel: Awaited<ReturnType<typeof painelCarteira>>, pagin
           return `${quando(item.em)}  ${rotuloTipo(item.tipo)}  ${sinal} R$ ${item.valor}\n    ${conta?.numero ?? item.conta}  ·  ${item.comprovante ?? "s/ comprovante"}`;
         });
   return {
-    texto: ["Movimentação  ·  horário de Brasília", "", ...linhas, fatia.rodape].filter((item) => item.length > 0).join("\n"),
+    texto: ["Lançamentos  ·  horário de Brasília", "", ...linhas, fatia.rodape].filter((item) => item.length > 0).join("\n"),
     teclado: [...nav("ledger"), ...fatia.teclado("l")],
   };
 }
@@ -662,50 +676,86 @@ function telaParametros(
 ): TelaAdmin {
   const amostraEnvio = detalheTaxaPixExterno(10_000, "envio");
   const amostraRecebimento = detalheTaxaPixExterno(10_000, "recebimento");
+  const qrCem = 10_000 + amostraRecebimento.totalCentavos;
+  const quandoGateway = gateway?.em !== undefined ? ` · ${formatarQuando(gateway.em)}` : "";
   const texto = [
-    "Parametrização operacional",
+    "Ajustes",
     "",
-    `Instituição: ${config.nomeExibido}`,
-    `Liquidação PIX: ${rotuloLiquidacao()}`,
-    `Chave de recebimento: ${config.chaveRecebimento || "não informada"}`,
-    `Praça: ${config.cidadeRecebimento}`,
-    `Custo da gateway (envio): R$ ${reaisDe(config.taxaGatewayCentavos)}`,
-    `Custo da gateway (recebimento): R$ ${reaisDe(config.taxaGatewayRecebimentoCentavos)} + ${config.taxaGatewayRecebimentoPercentual}%`,
-    `Adicional LinhaBank: R$ ${reaisDe(config.taxaCentavos)} + ${config.taxaPercentual}%`,
-    `PIX externo envio: R$ ${reaisDe(amostraEnvio.totalCentavos)} em R$ 100,00`,
-    `PIX externo recebimento: R$ ${reaisDe(amostraRecebimento.totalCentavos)} em R$ 100,00`,
-    "Tarifa PIX interno: isento",
-    ...linhasTaxasGateway(gateway),
-    `Limite por operação: R$ ${reaisDe(config.limiteCentavos)}`,
-    `Identificação no atendimento: ${config.prefixoThialinha ? "ativa" : "inativa"}`,
-    `Canal digital: ${config.botaoMiniApp ? "ativo" : "inativo"}`,
-    `Endereço do canal: ${config.webappUrl || "não informado"}`,
+    "TARIFAS",
+    "Entre contas LinhaBank: grátis",
+    "",
+    "Enviar para fora",
+    `  Custo ${rotuloLiquidacao()}: R$ ${reaisDe(config.taxaGatewayCentavos)}`,
+    `  Taxa LinhaBank: R$ ${reaisDe(config.taxaCentavos)} + ${config.taxaPercentual}%`,
+    `  Em R$ 100,00 o cliente paga R$ ${reaisDe(amostraEnvio.totalCentavos)}`,
+    "",
+    "Receber de fora (depósito)",
+    `  Custo ${rotuloLiquidacao()}: R$ ${reaisDe(config.taxaGatewayRecebimentoCentavos)} + ${config.taxaGatewayRecebimentoPercentual}%`,
+    `  Taxa LinhaBank: R$ ${reaisDe(config.taxaCentavos)} + ${config.taxaPercentual}%`,
+    `  Em R$ 100,00 o QR sai R$ ${reaisDe(qrCem)} (taxa já no PIX)`,
+    ...linhasTaxasGateway(gateway, quandoGateway),
+    "",
+    "CONTA",
+    `Nome: ${config.nomeExibido}`,
+    `Chave PIX: ${config.chaveRecebimento || "não informada"}`,
+    `Cidade: ${config.cidadeRecebimento}`,
+    `Limite por PIX: R$ ${reaisDe(config.limiteCentavos)}`,
+    `Canal Telegram: ${config.canalMovimento || "operadores"}`,
     `Operadores: ${config.chatsAdmin || "—"}`,
-    `Canal de movimento: ${config.canalMovimento || "operadores (padrão)"}`,
   ].join("\n");
   return {
     texto,
     teclado: [
       ...nav("config"),
       [
-        { text: "Instituição", callback_data: "a:k:n" },
+        { text: "Taxa R$", callback_data: "a:k:f" },
+        { text: "Taxa %", callback_data: "a:k:e" },
+        { text: "Puxar Asaas", callback_data: "a:r" },
+      ],
+      [
+        { text: "Nome", callback_data: "a:k:n" },
         { text: "Chave PIX", callback_data: "a:k:h" },
-        { text: "Praça", callback_data: "a:k:i" },
+        { text: "Cidade", callback_data: "a:k:i" },
       ],
       [
-        { text: "Adicional R$", callback_data: "a:k:f" },
-        { text: "Adicional %", callback_data: "a:k:e" },
         { text: "Limite", callback_data: "a:k:u" },
-      ],
-      [
-        { text: config.prefixoThialinha ? "Atendimento: on" : "Atendimento: off", callback_data: "a:t:p" },
-        { text: config.botaoMiniApp ? "Canal: on" : "Canal: off", callback_data: "a:t:b" },
-      ],
-      [
+        { text: "Canal", callback_data: "a:k:m" },
         { text: "Operadores", callback_data: "a:k:s" },
-        { text: "Canal digital", callback_data: "a:k:w" },
-        { text: "Canal TG", callback_data: "a:k:m" },
       ],
+      [{ text: "Mais opções", callback_data: "a:o" }],
+    ],
+  };
+}
+
+function telaMais(config: ReturnType<typeof configAtual>): TelaAdmin {
+  const texto = [
+    "Mais opções",
+    "",
+    `Nome no chat: ${config.prefixoThialinha ? "ligado" : "desligado"}`,
+    `Aplicativo: ${config.botaoMiniApp ? "ligado" : "desligado"}`,
+    `URL do aplicativo: ${config.webappUrl || "não informada"}`,
+    `Ambiente: ${config.modo === "live" ? "produção" : "homologação"}`,
+  ].join("\n");
+  return {
+    texto,
+    teclado: [
+      ...nav("config"),
+      [
+        { text: config.prefixoThialinha ? "Nome no chat: on" : "Nome no chat: off", callback_data: "a:t:p" },
+        { text: config.botaoMiniApp ? "App: on" : "App: off", callback_data: "a:t:b" },
+      ],
+      [{ text: "URL do app", callback_data: "a:k:w" }],
+      [
+        {
+          text: config.modo === "sandbox" ? "• Homologação" : "Homologação",
+          callback_data: "a:ms",
+        },
+        {
+          text: config.modo === "live" ? "• Produção" : "Produção",
+          callback_data: "a:ml",
+        },
+      ],
+      [{ text: "Voltar aos ajustes", callback_data: "a:g" }],
     ],
   };
 }
@@ -721,11 +771,11 @@ function telaPendente(campo: CampoPendente): TelaAdmin {
     };
   }
   const atual = configAtual();
-  const valor = String(atual[campo] ?? "");
+  const valor = valorCampo(campo, atual);
   return {
     texto: [
       `Alterar ${ROTULO_CAMPO[campo]}`,
-      `Vigente: ${valor.length > 0 ? valor : "não informado"}`,
+      `Hoje: ${valor.length > 0 ? valor : "não informado"}`,
       DICA_CAMPO[campo],
       "Envie o novo valor.",
     ].join("\n"),
@@ -856,19 +906,20 @@ async function lerTaxasGateway(kv: HostKvApi): Promise<(TaxasPsp & { em?: string
   };
 }
 
-function linhasTaxasGateway(gateway: (TaxasPsp & { em?: string }) | undefined): string[] {
+function valorCampo(campo: Exclude<CampoPendente, "busca">, atual: ReturnType<typeof configAtual>): string {
+  if (campo === "taxaCentavos" || campo === "limiteCentavos") return `R$ ${reaisDe(atual[campo])}`;
+  return String(atual[campo] ?? "");
+}
+
+function linhasTaxasGateway(gateway: (TaxasPsp & { em?: string }) | undefined, quando: string): string[] {
   if (gateway === undefined) return [];
-  const quando = gateway.em !== undefined ? ` · ${formatarQuando(gateway.em)}` : "";
   const envioGratis =
     gateway.envioGratisMes !== undefined && gateway.envioGratisMes > 0 ? ` · ${gateway.envioGratisMes} envios isentos/mês` : "";
-  return [
-    `Tarifa ${gateway.origem} envio: R$ ${reaisDe(gateway.taxaCentavos)}${envioGratis}`,
-    `Tarifa ${gateway.origem} recebimento: R$ ${reaisDe(gateway.recebimentoCentavos)} + ${gateway.recebimentoPercentual}%${quando}`,
-  ];
+  return ["", `Última leitura ${gateway.origem}${quando}${envioGratis}`];
 }
 
 function avisoTaxasGateway(taxas: TaxasPsp): string {
-  return `Custo ${taxas.origem} atualizado: envio R$ ${reaisDe(taxas.taxaCentavos)}, recebimento R$ ${reaisDe(taxas.recebimentoCentavos)}. Adicional LinhaBank inalterado.`;
+  return `Custo ${taxas.origem} atualizado: envio R$ ${reaisDe(taxas.taxaCentavos)}, recebimento R$ ${reaisDe(taxas.recebimentoCentavos)}. Taxa LinhaBank inalterada.`;
 }
 
 function tipoCredito(tipo: string): boolean {

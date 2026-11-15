@@ -210,6 +210,11 @@ delete process.env.PIX_TAXA_PERCENTUAL;
   process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS = "99";
   const origem = await aceitarTermos(kv, "g", "Ana Silva");
   const destino = await aceitarTermos(kv, "h", "Bia Souza");
+  const deposito = await operarConta(kv, "g", "dep-com-tarifa", { acao: "depositar", valor: "100,00" });
+  assert(
+    deposito.ok && deposito.valor === "102,99" && deposito.taxa === "2,99" && deposito.liquido === "100,00",
+    `depósito sem tarifa no QR: ${deposito.ok ? `${deposito.valor}/${deposito.taxa}` : deposito.motivo}`,
+  );
   const credito = await creditarPixRecebido(kv, {
     id: "credito-recebimento-taxa",
     referencia: origem.referencia,
