@@ -8,6 +8,11 @@ process.env.LINHABANK_MODO = "sandbox";
 delete process.env.DATABASE_URL;
 delete process.env.LINHABANK_DB_PATH;
 delete process.env.LINHABANK_SQL;
+delete process.env.PIX_TAXA_CENTAVOS;
+delete process.env.PIX_TAXA_PERCENTUAL;
+delete process.env.PIX_TAXA_GATEWAY_CENTAVOS;
+delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS;
+delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_PERCENTUAL;
 
 let envios = 0;
 globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -214,6 +219,40 @@ async function saldoDe(kv: HostKvApi, chatId: string): Promise<number> {
   assert(!texto.includes("9,00"), "start citou movimento antigo");
 }
 
+{
+  const kv = kvMemoria();
+  process.env.PIX_TAXA_CENTAVOS = "50";
+  process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS = "99";
+  const conta = await abrir(kv, "taxa-in");
+  const credito = await creditarPixRecebido(kv, {
+    id: "cred-taxa-in",
+    referencia: conta.referencia,
+    valorCentavos: 1_000,
+    endToEndId: "E2ETAXAIN",
+  });
+  assert(credito.estado === "novo", "recebimento com taxa não creditou");
+  assert((await saldoDe(kv, "taxa-in")) === 851, `saldo líquido ${await saldoDe(kv, "taxa-in")}`);
+  const deposito = await operarConta(kv, "taxa-in", "dep-taxa", { acao: "depositar", valor: "10,00" });
+  assert(deposito.ok && deposito.txid !== undefined, "depósito com tarifa não gerou cobrança");
+  const pago = await creditarPixRecebido(kv, {
+    id: "wh-dep-taxa",
+    cobrancaId: deposito.destino,
+    txid: deposito.txid,
+    valorCentavos: 1_000,
+  });
+  assert(pago.estado === "novo" && (await saldoDe(kv, "taxa-in")) === 1_702, "depósito liquidado não descontou a tarifa");
+  const destino = await abrir(kv, "taxa-int");
+  const interno = await operarConta(kv, "taxa-in", "pix-int-taxa", {
+    acao: "enviar_pix",
+    valor: "8,51",
+    chavePix: destino.chave,
+  });
+  assert(interno.ok && interno.interno === true && interno.taxa === "0,00", "PIX interno cobrou tarifa de recebimento");
+  assert((await saldoDe(kv, "taxa-int")) === 851, "destino interno não recebeu o valor integral");
+  delete process.env.PIX_TAXA_CENTAVOS;
+  delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS;
+}
+
 assert(sqlDisponivel() === false, "SQL ligou sem configuração");
 
 process.env.LINHABANK_SQL = "memoria";
@@ -234,6 +273,22 @@ process.env.LINHABANK_SQL = "memoria";
   const saldoOrigem = await operarSql(kv, "sql-a", "sql-sa", { acao: "resumo" });
   const saldoDestino = await operarSql(kv, "sql-b", "sql-sb", { acao: "resumo" });
   assert(saldoOrigem.saldo === "30,00" && saldoDestino.saldo === "10,00", "saldos SQL divergiram");
+}
+
+{
+  const { aceitarTermos: aceitarSql, operarConta: operarSql, creditarPixRecebido: creditarSql } = await import(
+    "../bot/lib/banco.js"
+  );
+  process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS = "99";
+  process.env.PIX_TAXA_CENTAVOS = "1";
+  const kv = kvMemoria();
+  const conta = await aceitarSql(kv, "sql-taxa", "Ana");
+  const credito = await creditarSql(kv, { id: "sql-cred-taxa", referencia: conta.referencia, valorCentavos: 200 });
+  assert(credito.estado === "novo", "SQL não creditou recebimento com tarifa");
+  const saldo = await operarSql(kv, "sql-taxa", "sql-taxa-s", { acao: "resumo" });
+  assert(saldo.saldo === "1,00", `SQL não aplicou crédito e tarifa na sequência: ${saldo.saldo}`);
+  delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS;
+  delete process.env.PIX_TAXA_CENTAVOS;
 }
 
 console.log("carteira ok");

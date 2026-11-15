@@ -5,12 +5,15 @@ process.env.LINHABANK_MODO = "sandbox";
 process.env.ADMIN_TOKEN = "token-admin-teste";
 delete process.env.PIX_TAXA_CENTAVOS;
 delete process.env.PIX_TAXA_PERCENTUAL;
+delete process.env.PIX_TAXA_GATEWAY_CENTAVOS;
+delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS;
+delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_PERCENTUAL;
 delete process.env.LINHABANK_ADMIN_CHATS;
 
 const { aceitarTermos, bloquearConta, operarConta } = await import("../bot/lib/banco.js");
 const { interpretarAtualizacao } = await import("../bot/lib/atendimento.js");
 const { garantirConfig, gravarConfig, configAtual } = await import("../bot/lib/config.js");
-const { taxaPixExternoCentavos } = await import("../bot/lib/taxa.js");
+const { taxaPixExternoCentavos, taxaPixExternoRecebimentoCentavos } = await import("../bot/lib/taxa.js");
 const { ehAdmin, modoCarteira } = await import("../bot/lib/modo.js");
 const {
   aplicarAcao,
@@ -235,19 +238,29 @@ function semIa(texto: string): void {
     await gravarConfig(kv, { chatsAdmin: "1001", taxaCentavos: 150, taxaPercentual: "1,50" });
     const atualizado = await aplicarAcao(kv, "1001", "a:r");
     assert(configAtual().taxaGatewayCentavos === 200, `custo da gateway ${configAtual().taxaGatewayCentavos}`);
+    assert(configAtual().taxaGatewayRecebimentoCentavos === 99, `custo de recebimento ${configAtual().taxaGatewayRecebimentoCentavos}`);
     assert(configAtual().taxaCentavos === 150, "atualizar apagou o adicional");
     assert(configAtual().taxaPercentual === "1,50", "atualizar apagou o adicional percentual");
     assert((atualizado.aviso ?? "").includes("Adicional LinhaBank inalterado"), `aviso atualizar: ${atualizado.aviso}`);
+    assert((atualizado.aviso ?? "").includes("recebimento R$ 0,99"), `aviso atualizar sem recebimento: ${atualizado.aviso}`);
     await aplicarAcao(kv, "1001", "a:g");
     const tarifas = await montarTela(kv, "1001");
     assert(tarifas.texto.includes("Custo da gateway (envio): R$ 2,00"), "tarifas sem o custo da gateway");
+    assert(tarifas.texto.includes("Custo da gateway (recebimento): R$ 0,99 + 0%"), "tarifas sem o custo de recebimento");
     assert(tarifas.texto.includes("Adicional LinhaBank: R$ 1,50 + 1,50%"), "tarifas sem o adicional");
-    assert(tarifas.texto.includes("recebimento: R$ 0,99"), "tarifas sem a tarifa de recebimento da gateway");
+    assert(tarifas.texto.includes("PIX externo envio: R$ 5,00 em R$ 100,00"), "tarifas sem o total de envio");
+    assert(tarifas.texto.includes("PIX externo recebimento: R$ 3,99 em R$ 100,00"), "tarifas sem o total de recebimento");
     assert(taxaPixExternoCentavos(10_000) === 500, `PIX externo sem soma gateway+adicional: ${taxaPixExternoCentavos(10_000)}`);
+    assert(
+      taxaPixExternoRecebimentoCentavos(10_000) === 399,
+      `recebimento externo sem soma gateway+adicional: ${taxaPixExternoRecebimentoCentavos(10_000)}`,
+    );
     await aplicarAcao(kv, "1001", "a:k:f");
     await aplicarTextoAdmin(kv, "1001", "50");
     assert(configAtual().taxaCentavos === 50 && configAtual().taxaGatewayCentavos === 200, "adicional não ficou personalizável");
+    assert(configAtual().taxaGatewayRecebimentoCentavos === 99, "adicional apagou o custo de recebimento");
     assert(taxaPixExternoCentavos(10_000) === 400, "adicional novo não entrou no PIX externo");
+    assert(taxaPixExternoRecebimentoCentavos(10_000) === 299, "adicional novo não entrou no recebimento externo");
   } finally {
     globalThis.fetch = originalFetch;
     if (gatewayUrl === undefined) delete process.env.PIX_GATEWAY_URL;

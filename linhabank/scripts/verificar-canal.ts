@@ -9,6 +9,8 @@ process.env.LINHABANK_MODO = "sandbox";
 delete process.env.LINHABANK_SILENCIO_CANAL;
 delete process.env.PIX_TAXA_CENTAVOS;
 delete process.env.PIX_TAXA_PERCENTUAL;
+delete process.env.PIX_TAXA_GATEWAY_CENTAVOS;
+delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS;
 delete process.env.DATABASE_URL;
 delete process.env.LINHABANK_DB_PATH;
 delete process.env.LINHABANK_SQL;
@@ -100,6 +102,16 @@ function textos(): string[] {
   });
   assert(enviado.includes("PIX enviado (externo)"), "envio externo sem rótulo");
   assert(enviado.includes("Tarifa R$ 1,50"), "envio externo sem tarifa");
+  const recebido = textoMovimentoCanal({
+    id: "t3",
+    tipo: "pix_recebido",
+    conta: { nome: "Ana Silva", numero: "0001", agencia: "0001" },
+    valorCentavos: 2500,
+    origem: "João",
+    taxaCentavos: 99,
+  });
+  assert(recebido.includes("PIX recebido"), "recebimento externo sem rótulo");
+  assert(recebido.includes("Tarifa R$ 0,99"), "recebimento externo sem tarifa");
 }
 
 {
@@ -147,6 +159,7 @@ function textos(): string[] {
   });
   assert(externo.ok === true, "PIX externo falhou");
   assert(textos().some((item) => item.includes("PIX enviado (externo)") && item.includes("ana@email.com")), "canal sem envio externo");
+  assert(textos().some((item) => item.includes("PIX recebido") && item.includes("Tarifa isenta")), "recebimento interno no canal cobrou tarifa");
 
   const antes = telegram.length;
   await creditarPixRecebido(kv, {

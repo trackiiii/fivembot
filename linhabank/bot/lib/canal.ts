@@ -24,6 +24,7 @@ export type EventoCanal =
       valorCentavos: number;
       comprovante?: string;
       origem?: string;
+      taxaCentavos?: number;
     }
   | {
       id: string;
@@ -42,6 +43,7 @@ export type EventoCanal =
       valorCentavos: number;
       origem?: string;
       comprovante?: string;
+      taxaCentavos?: number;
     };
 
 export function idCanalValido(id: string): boolean {
@@ -70,6 +72,7 @@ export function textoMovimentoCanal(evento: EventoCanal): string {
       `Conta ${titular}`,
       `Valor ${valor}`,
       evento.origem ? `Origem ${evento.origem}` : "",
+      evento.taxaCentavos !== undefined && evento.taxaCentavos > 0 ? `Tarifa R$ ${reais(evento.taxaCentavos)}` : "",
       evento.comprovante ? `Comprovante ${evento.comprovante}` : "",
     ]);
   }
@@ -96,6 +99,11 @@ export function textoMovimentoCanal(evento: EventoCanal): string {
       `Conta ${titular}`,
       evento.origem ? `Origem ${evento.origem}` : "",
       `Valor ${valor}`,
+      evento.tipo === "pix_recebido" && evento.taxaCentavos !== undefined && evento.taxaCentavos > 0
+        ? `Tarifa R$ ${reais(evento.taxaCentavos)}`
+        : evento.tipo === "pix_recebido"
+          ? "Tarifa isenta"
+          : "",
       evento.comprovante ? `Comprovante ${evento.comprovante}` : "",
     ]);
   }

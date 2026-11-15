@@ -8,6 +8,8 @@ export type ConfigBot = {
   taxaCentavos: number;
   taxaPercentual: string;
   taxaGatewayCentavos: number;
+  taxaGatewayRecebimentoCentavos: number;
+  taxaGatewayRecebimentoPercentual: string;
   chaveRecebimento: string;
   cidadeRecebimento: string;
   limiteCentavos: number;
@@ -27,6 +29,8 @@ export function defaultsEnv(): ConfigBot {
     taxaCentavos: inteiroEnv(process.env.PIX_TAXA_CENTAVOS, 0, 500_000),
     taxaPercentual: percentualEnv(process.env.PIX_TAXA_PERCENTUAL),
     taxaGatewayCentavos: inteiroEnv(process.env.PIX_TAXA_GATEWAY_CENTAVOS, 0, 500_000),
+    taxaGatewayRecebimentoCentavos: inteiroEnv(process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS, 0, 500_000),
+    taxaGatewayRecebimentoPercentual: percentualEnv(process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_PERCENTUAL),
     chaveRecebimento: (process.env.PIX_RECEBIMENTO_CHAVE ?? "").trim(),
     cidadeRecebimento: (process.env.PIX_RECEBIMENTO_CIDADE ?? "SAO PAULO").trim() || "SAO PAULO",
     limiteCentavos: inteiroEnv(process.env.LINHABANK_LIMITE_CENTAVOS, 500_000, 2_000_000) || 500_000,
@@ -92,10 +96,19 @@ function aplicarPedido(base: ConfigBot, pedido: unknown): ConfigBot {
   if (typeof bruto.taxaGatewayCentavos === "number" && Number.isSafeInteger(bruto.taxaGatewayCentavos)) {
     proximo.taxaGatewayCentavos = Math.max(0, Math.min(500_000, bruto.taxaGatewayCentavos));
   }
+  if (typeof bruto.taxaGatewayRecebimentoCentavos === "number" && Number.isSafeInteger(bruto.taxaGatewayRecebimentoCentavos)) {
+    proximo.taxaGatewayRecebimentoCentavos = Math.max(0, Math.min(500_000, bruto.taxaGatewayRecebimentoCentavos));
+  }
   if (typeof bruto.taxaPercentual === "string") {
     const limpo = bruto.taxaPercentual.trim();
     proximo.taxaPercentual = pontosPercentuaisDe(limpo) > 0 || limpo === "0" || limpo === "0,00" || limpo === "0.00" ? limpo : base.taxaPercentual;
     if (limpo.length === 0) proximo.taxaPercentual = "0";
+  }
+  if (typeof bruto.taxaGatewayRecebimentoPercentual === "string") {
+    const limpo = bruto.taxaGatewayRecebimentoPercentual.trim();
+    proximo.taxaGatewayRecebimentoPercentual =
+      pontosPercentuaisDe(limpo) > 0 || limpo === "0" || limpo === "0,00" || limpo === "0.00" ? limpo : base.taxaGatewayRecebimentoPercentual;
+    if (limpo.length === 0) proximo.taxaGatewayRecebimentoPercentual = "0";
   }
   if (typeof bruto.chaveRecebimento === "string") proximo.chaveRecebimento = bruto.chaveRecebimento.trim().slice(0, 77);
   if (typeof bruto.cidadeRecebimento === "string") {

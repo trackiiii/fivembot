@@ -33,7 +33,7 @@ import {
   upsertContaSql,
 } from "./store-sql.js";
 import { garantirConfig, configAtual } from "./config.js";
-import { taxaPixExternoCentavos } from "./taxa.js";
+import { taxaPixExternoCentavos, taxaPixExternoRecebimentoCentavos } from "./taxa.js";
 
 export const TERMOS_VERSAO = "2026-11-15-2";
 export const AGENCIA = "0001";
@@ -828,6 +828,20 @@ export type AvisoPix = {
   pixQrCodeId?: string;
 };
 
+function lancamentosRecebimentoExterno(
+  chatId: string,
+  valorCentavos: number,
+  tipo: "deposito" | "pix_recebido",
+  descricao: string,
+): { movimentos: { chatId: string; tipo: TipoMovimento; valorCentavos: number; descricao: string }[]; taxa: number } {
+  const taxa = Math.min(taxaPixExternoRecebimentoCentavos(valorCentavos), valorCentavos);
+  const movimentos: { chatId: string; tipo: TipoMovimento; valorCentavos: number; descricao: string }[] = [
+    { chatId, tipo, valorCentavos, descricao },
+  ];
+  if (taxa > 0) movimentos.push({ chatId, tipo: "taxa", valorCentavos: -taxa, descricao: "Taxa de PIX recebido" });
+  return { movimentos, taxa };
+}
+
 export async function creditarPixRecebido(
   kv: HostKvApi,
   aviso: AvisoPix,
@@ -835,6 +849,7 @@ export async function creditarPixRecebido(
   | { estado: "novo"; chatId: string; texto: string }
   | { estado: "repetido" | "conta_ausente" | "valor_invalido" | "valor_divergente" }
 > {
+  await garantirConfig(kv);
   if (!Number.isSafeInteger(aviso.valorCentavos) || aviso.valorCentavos <= 0 || aviso.valorCentavos > 100_000_000_000) {
     return { estado: "valor_invalido" };
   }
@@ -850,14 +865,13 @@ export async function creditarPixRecebido(
     if (cobranca.valorCentavos !== aviso.valorCentavos) return { estado: "valor_divergente" };
     const destinoCobranca = await lerConta(kv, cobranca.chatId);
     if (destinoCobranca === undefined) return { estado: "conta_ausente" };
-    const movimento = await aplicar(kv, [destinoCobranca.chatId], `pix-in:${aviso.id}`, [
-      {
-        chatId: destinoCobranca.chatId,
-        tipo: "deposito",
-        valorCentavos: aviso.valorCentavos,
-        descricao: (aviso.pagador?.trim().slice(0, 80) || "Depósito PIX") as string,
-      },
-    ]);
+    const lancado = lancamentosRecebimentoExterno(
+      destinoCobranca.chatId,
+      aviso.valorCentavos,
+      "deposito",
+      (aviso.pagador?.trim().slice(0, 80) || "Depósito PIX") as string,
+    );
+    const movimento = await aplicar(kv, [destinoCobranca.chatId], `pix-in:${aviso.id}`, lancado.movimentos);
     if (!movimento.ok) return { estado: "conta_ausente" };
     const atual = movimento.contas.find((item) => item.chatId === destinoCobranca.chatId) ?? destinoCobranca;
     const paga: Cobranca = {
@@ -878,6 +892,7 @@ export async function creditarPixRecebido(
       valorCentavos: aviso.valorCentavos,
       comprovante,
       origem: aviso.pagador?.trim().slice(0, 80),
+      taxaCentavos: lancado.taxa,
     });
     return {
       estado: "novo",
@@ -886,6 +901,7 @@ export async function creditarPixRecebido(
         valor: reaisDe(aviso.valorCentavos),
         saldo: reaisDe(atual.saldoCentavos),
         comprovante,
+        taxa: lancado.taxa > 0 ? reaisDe(lancado.taxa) : undefined,
       }),
     };
   }
@@ -893,14 +909,13 @@ export async function creditarPixRecebido(
   if (aviso.referencia === undefined) return { estado: "conta_ausente" };
   const destino = await contaPorChat(kv, chaveContaReferencia(aviso.referencia));
   if (destino === undefined) return { estado: "conta_ausente" };
-  const movimento = await aplicar(kv, [destino.chatId], `pix-in:${aviso.id}`, [
-    {
-      chatId: destino.chatId,
-      tipo: "pix_recebido",
-      valorCentavos: aviso.valorCentavos,
-      descricao: aviso.pagador?.trim().slice(0, 80) || "PIX recebido",
-    },
-  ]);
+  const lancado = lancamentosRecebimentoExterno(
+    destino.chatId,
+    aviso.valorCentavos,
+    "pix_recebido",
+    aviso.pagador?.trim().slice(0, 80) || "PIX recebido",
+  );
+  const movimento = await aplicar(kv, [destino.chatId], `pix-in:${aviso.id}`, lancado.movimentos);
   if (!movimento.ok) return { estado: "conta_ausente" };
   const atual = movimento.contas.find((item) => item.chatId === destino.chatId) ?? destino;
   await kv.put(marca, true);
@@ -912,6 +927,7 @@ export async function creditarPixRecebido(
     valorCentavos: aviso.valorCentavos,
     origem: aviso.pagador?.trim().slice(0, 80),
     comprovante,
+    taxaCentavos: lancado.taxa,
   });
   return {
     estado: "novo",
@@ -920,6 +936,7 @@ export async function creditarPixRecebido(
       valor: reaisDe(aviso.valorCentavos),
       saldo: reaisDe(atual.saldoCentavos),
       comprovante,
+      taxa: lancado.taxa > 0 ? reaisDe(lancado.taxa) : undefined,
     }),
   };
 }

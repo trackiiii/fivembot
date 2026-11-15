@@ -18,7 +18,7 @@ import { configAtual, garantirConfig, gravarConfig, unirChatsAdmin } from "../co
 import { consultarTaxasGateway, rotuloLiquidacao, type TaxasPsp } from "../psp.js";
 import { dataHoraBrasil, formatarQuando } from "../horario.js";
 import { ehAdmin, emSandbox } from "../modo.js";
-import { detalheTaxaPixExterno, taxaPixExternoCentavos } from "../taxa.js";
+import { detalheTaxaPixExterno } from "../taxa.js";
 
 export const CHAVE_UI = (chatId: string) => `linhabank:admin:ui:${chatId}`;
 export const CHAVE_PENDENTE = (chatId: string) => `linhabank:admin:pendente:${chatId}`;
@@ -89,8 +89,8 @@ const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   nomeExibido: "2 a 32 caracteres.",
   chaveRecebimento: "E-mail, CPF, CNPJ, telefone ou chave aleatória.",
   cidadeRecebimento: "Até 15 letras, sem acento.",
-  taxaCentavos: "Ex.: 99 = R$ 0,99 a somar ao custo da gateway. PIX interno permanece isento.",
-  taxaPercentual: "Ex.: 1,50. Soma-se ao custo da gateway no PIX externo. Informe 0 para isentar o adicional percentual.",
+  taxaCentavos: "Ex.: 99 = R$ 0,99 a somar ao custo da gateway no envio e no recebimento externo. PIX interno permanece isento.",
+  taxaPercentual: "Ex.: 1,50. Soma-se ao custo da gateway no PIX externo de envio e de recebimento. Informe 0 para isentar o adicional percentual.",
   limiteCentavos: "Ex.: 250000 = R$ 2.500,00.",
   webappUrl: "Opcional. Somente HTTPS.",
   chatsAdmin: "Somente números. O operador atual permanece na lista.",
@@ -660,7 +660,8 @@ function telaParametros(
   config: ReturnType<typeof configAtual>,
   gateway?: TaxasPsp & { em?: string },
 ): TelaAdmin {
-  const amostra = detalheTaxaPixExterno(10_000);
+  const amostraEnvio = detalheTaxaPixExterno(10_000, "envio");
+  const amostraRecebimento = detalheTaxaPixExterno(10_000, "recebimento");
   const texto = [
     "Parametrização operacional",
     "",
@@ -669,9 +670,10 @@ function telaParametros(
     `Chave de recebimento: ${config.chaveRecebimento || "não informada"}`,
     `Praça: ${config.cidadeRecebimento}`,
     `Custo da gateway (envio): R$ ${reaisDe(config.taxaGatewayCentavos)}`,
+    `Custo da gateway (recebimento): R$ ${reaisDe(config.taxaGatewayRecebimentoCentavos)} + ${config.taxaGatewayRecebimentoPercentual}%`,
     `Adicional LinhaBank: R$ ${reaisDe(config.taxaCentavos)} + ${config.taxaPercentual}%`,
-    `PIX externo cobrado: R$ ${reaisDe(config.taxaGatewayCentavos + config.taxaCentavos)} + ${config.taxaPercentual}%`,
-    `Exemplo em R$ 100,00: R$ ${reaisDe(amostra.totalCentavos)}`,
+    `PIX externo envio: R$ ${reaisDe(amostraEnvio.totalCentavos)} em R$ 100,00`,
+    `PIX externo recebimento: R$ ${reaisDe(amostraRecebimento.totalCentavos)} em R$ 100,00`,
     "Tarifa PIX interno: isento",
     ...linhasTaxasGateway(gateway),
     `Limite por operação: R$ ${reaisDe(config.limiteCentavos)}`,
@@ -820,7 +822,11 @@ async function sincronizarTaxasGateway(kv: HostKvApi): Promise<string> {
     if (psp === "convênio ativo") return "Convênio HTTP não informa tarifas. Posição atualizada.";
     return "Posição atualizada.";
   }
-  await gravarConfig(kv, { taxaGatewayCentavos: taxas.taxaCentavos });
+  await gravarConfig(kv, {
+    taxaGatewayCentavos: taxas.taxaCentavos,
+    taxaGatewayRecebimentoCentavos: taxas.recebimentoCentavos,
+    taxaGatewayRecebimentoPercentual: taxas.recebimentoPercentual,
+  });
   await kv.put(CHAVE_TAXAS_GATEWAY, {
     origem: taxas.origem,
     taxaCentavos: taxas.taxaCentavos,
@@ -862,7 +868,7 @@ function linhasTaxasGateway(gateway: (TaxasPsp & { em?: string }) | undefined): 
 }
 
 function avisoTaxasGateway(taxas: TaxasPsp): string {
-  return `Custo ${taxas.origem} atualizado: envio R$ ${reaisDe(taxas.taxaCentavos)}. Adicional LinhaBank inalterado.`;
+  return `Custo ${taxas.origem} atualizado: envio R$ ${reaisDe(taxas.taxaCentavos)}, recebimento R$ ${reaisDe(taxas.recebimentoCentavos)}. Adicional LinhaBank inalterado.`;
 }
 
 function tipoCredito(tipo: string): boolean {

@@ -5,6 +5,9 @@ process.env.PIX_GATEWAY_URL = "https://pix.example.test";
 process.env.PIX_GATEWAY_TOKEN = "token-de-teste";
 delete process.env.PIX_TAXA_CENTAVOS;
 delete process.env.PIX_TAXA_PERCENTUAL;
+delete process.env.PIX_TAXA_GATEWAY_CENTAVOS;
+delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS;
+delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_PERCENTUAL;
 
 let envios = 0;
 let ultimoCorpo = "";
@@ -23,7 +26,7 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 };
 
 const { aceitarTermos, creditarPixRecebido, operarConta } = await import("../bot/lib/banco.js");
-const { taxaPixExternoCentavos } = await import("../bot/lib/taxa.js");
+const { taxaPixExternoCentavos, taxaPixExternoRecebimentoCentavos } = await import("../bot/lib/taxa.js");
 const { criarAgendamento, processarAgendamentos } = await import("../bot/lib/agenda.js");
 const { instanteNoBrasil } = await import("../bot/lib/horario.js");
 
@@ -68,14 +71,23 @@ async function saldoDe(kv: HostKvApi, chatId: string): Promise<number> {
 }
 
 assert(taxaPixExternoCentavos(10_000) === 0, "taxa padrao nao e zero");
+assert(taxaPixExternoRecebimentoCentavos(10_000) === 0, "taxa de recebimento padrao nao e zero");
 process.env.PIX_TAXA_CENTAVOS = "150";
 process.env.PIX_TAXA_PERCENTUAL = "1,50";
 assert(taxaPixExternoCentavos(10_000) === 300, `taxa configurada deu ${taxaPixExternoCentavos(10_000)}`);
+assert(taxaPixExternoRecebimentoCentavos(10_000) === 300, "adicional nao entrou no recebimento");
 process.env.PIX_TAXA_GATEWAY_CENTAVOS = "200";
+process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS = "99";
 assert(taxaPixExternoCentavos(10_000) === 500, `gateway + adicional deu ${taxaPixExternoCentavos(10_000)}`);
+assert(
+  taxaPixExternoRecebimentoCentavos(10_000) === 399,
+  `recebimento gateway + adicional deu ${taxaPixExternoRecebimentoCentavos(10_000)}`,
+);
 delete process.env.PIX_TAXA_GATEWAY_CENTAVOS;
+delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS;
 process.env.PIX_TAXA_PERCENTUAL = "texto";
 assert(taxaPixExternoCentavos(10_000) === 150, "percentual invalido mudou a taxa fixa");
+assert(taxaPixExternoRecebimentoCentavos(10_000) === 150, "percentual invalido mudou a taxa de recebimento");
 delete process.env.PIX_TAXA_CENTAVOS;
 delete process.env.PIX_TAXA_PERCENTUAL;
 
@@ -188,6 +200,46 @@ delete process.env.PIX_TAXA_PERCENTUAL;
   assert(rodada.enviados === 1 && envios === antes, "PIX agendado interno usou a gateway");
   assert((await saldoDe(kv, "e")) === 6_800 && (await saldoDe(kv, "f")) === 1_200, "agendamento interno movimentou errado");
   assert(avisos.some((texto) => texto.includes("Sem taxa")), "agendamento interno cobrou ou omitiu a taxa");
+}
+
+{
+  const kv = kvMemoria();
+  process.env.PIX_TAXA_CENTAVOS = "100";
+  process.env.PIX_TAXA_PERCENTUAL = "1,00";
+  process.env.PIX_TAXA_GATEWAY_CENTAVOS = "200";
+  process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS = "99";
+  const origem = await aceitarTermos(kv, "g", "Ana Silva");
+  const destino = await aceitarTermos(kv, "h", "Bia Souza");
+  const credito = await creditarPixRecebido(kv, {
+    id: "credito-recebimento-taxa",
+    referencia: origem.referencia,
+    valorCentavos: 10_000,
+    endToEndId: "E2EREC1",
+  });
+  assert(credito.estado === "novo", "recebimento externo com taxa nao creditou");
+  assert(credito.estado === "novo" && credito.texto.includes("Taxa: R$ 2,99"), `recebimento sem taxa no texto: ${credito.estado === "novo" ? credito.texto : credito.estado}`);
+  assert((await saldoDe(kv, "g")) === 9_701, `saldo apos recebimento ${await saldoDe(kv, "g")}`);
+  const interno = await operarConta(kv, "g", "pix-interno-com-tarifa", {
+    acao: "enviar_pix",
+    valor: "10,00",
+    chavePix: destino.chaveInterna,
+  });
+  assert(interno.ok && interno.interno === true && interno.taxa === "0,00", "PIX interno passou a cobrar taxa");
+  assert((await saldoDe(kv, "g")) === 8_701 && (await saldoDe(kv, "h")) === 1_000, "PIX interno com tarifa externa divergiu");
+  const externo = await operarConta(kv, "g", "pix-externo-com-tarifa", {
+    acao: "enviar_pix",
+    valor: "10,00",
+    chavePix: "ana@email.com",
+  });
+  assert(externo.ok && externo.interno === false && externo.taxa === "3,10", `envio externo com tarifa: ${externo.ok ? externo.taxa : externo.motivo}`);
+  assert((await saldoDe(kv, "g")) === 7_391, `saldo apos envio externo ${await saldoDe(kv, "g")}`);
+  const extrato = await operarConta(kv, "g", "extrato-g", { acao: "extrato" });
+  assert(extrato.extrato?.some((item) => item.tipo === "taxa" && item.valor === "-2,99") === true, "extrato sem taxa de recebimento");
+  assert(extrato.extrato?.some((item) => item.tipo === "taxa" && item.valor === "-3,10") === true, "extrato sem taxa de envio");
+  delete process.env.PIX_TAXA_CENTAVOS;
+  delete process.env.PIX_TAXA_PERCENTUAL;
+  delete process.env.PIX_TAXA_GATEWAY_CENTAVOS;
+  delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS;
 }
 
 console.log("pix ok");

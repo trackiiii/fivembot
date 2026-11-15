@@ -153,15 +153,19 @@ export async function aplicarAtomico(
       if (conta === undefined) return { ok: false as const, motivo: "sem_conta" as const, contas: [] };
       mapa.set(id, { ...conta, extrato: [...conta.extrato] });
     }
+    const saldos = new Map<string, number>();
+    for (const [id, conta] of mapa) saldos.set(id, conta.saldoCentavos);
     for (const movimento of pedido.movimentos) {
       const conta = mapa.get(movimento.chatId);
       if (conta === undefined) return { ok: false as const, motivo: "sem_conta" as const, contas: [] };
-      if (conta.status === "bloqueada" && movimento.valorCentavos < 0) {
+      if (conta.status === "bloqueada" && movimento.valorCentavos < 0 && movimento.tipo !== "taxa") {
         return { ok: false as const, motivo: "conta_bloqueada" as const, contas: [...mapa.values()] };
       }
-      if (movimento.valorCentavos < 0 && conta.saldoCentavos + movimento.valorCentavos < 0) {
+      const saldo = saldos.get(movimento.chatId) ?? 0;
+      if (movimento.valorCentavos < 0 && saldo + movimento.valorCentavos < 0) {
         return { ok: false as const, motivo: "saldo_insuficiente" as const, contas: [...mapa.values()] };
       }
+      saldos.set(movimento.chatId, saldo + movimento.valorCentavos);
     }
     const comprovante = novoComprovante();
     const agora = new Date().toISOString();

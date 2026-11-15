@@ -113,12 +113,19 @@ export function respostaBoleto(dados: { valor: string; descricao: string; saldo:
   return `Pagamento de R$ ${dados.valor} registrado: ${dados.descricao}. Saldo: R$ ${dados.saldo}.`;
 }
 
-export function respostaPixRecebido(dados: { valor: string; saldo: string; comprovante?: string; origem?: string }): string {
+export function respostaPixRecebido(dados: {
+  valor: string;
+  saldo: string;
+  comprovante?: string;
+  origem?: string;
+  taxa?: string;
+}): string {
   const comprovante = dados.comprovante === undefined || dados.comprovante.length === 0 ? "" : ` Comprovante ${dados.comprovante}.`;
   if (dados.origem !== undefined && dados.origem.length > 0) {
     return `PIX de R$ ${dados.valor} recebido da conta LinhaBank ${dados.origem}. Saldo: R$ ${dados.saldo}.`;
   }
-  return `PIX de R$ ${dados.valor} recebido na sua conta. Saldo: R$ ${dados.saldo}.${comprovante}`;
+  const taxa = dados.taxa === undefined || dados.taxa === "0,00" ? "" : ` Taxa: R$ ${dados.taxa}.`;
+  return `PIX de R$ ${dados.valor} recebido na sua conta.${taxa} Saldo: R$ ${dados.saldo}.${comprovante}`;
 }
 
 export function respostaAgendamentoCriado(dados: {

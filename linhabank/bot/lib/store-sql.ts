@@ -120,15 +120,19 @@ export async function aplicarSql(pedido: {
       if (rows[0] === undefined) return { ok: false as const, motivo: "sem_conta" as const };
       contas.set(id, rows[0]);
     }
+    const saldos = new Map<string, number>();
+    for (const [id, conta] of contas) saldos.set(id, inteiro(conta.saldo_centavos));
     for (const movimento of pedido.movimentos) {
       const conta = contas.get(movimento.chatId);
       if (conta === undefined) return { ok: false as const, motivo: "sem_conta" as const };
-      if (conta.status === "bloqueada" && movimento.valorCentavos < 0) {
+      if (conta.status === "bloqueada" && movimento.valorCentavos < 0 && movimento.tipo !== "taxa") {
         return { ok: false as const, motivo: "conta_bloqueada" as const };
       }
-      if (movimento.valorCentavos < 0 && inteiro(conta.saldo_centavos) + movimento.valorCentavos < 0) {
+      const saldo = saldos.get(movimento.chatId) ?? 0;
+      if (movimento.valorCentavos < 0 && saldo + movimento.valorCentavos < 0) {
         return { ok: false as const, motivo: "saldo_insuficiente" as const };
       }
+      saldos.set(movimento.chatId, saldo + movimento.valorCentavos);
     }
     const comprovante = novoComprovante();
     for (const movimento of pedido.movimentos) {
