@@ -5,6 +5,7 @@ import { avisoDePagamentoAsaas, chaveQrAsaas, lerEventoAsaas, referenciaTransfer
 import { creditarPixRecebido, estornarPixExterno } from "../lib/banco.js";
 import { enviarTexto } from "../lib/atendimento.js";
 import { registrarTroca } from "../lib/atendimento.js";
+import { autorizarRotaPix } from "../lib/segredo.js";
 
 const avisoSchema = z.object({
   id: z.string().min(8).max(80),
@@ -45,7 +46,10 @@ export default defineChannel({
     POST("/recebido", {
       description: "A gateway avisa um PIX recebido na conta LinhaBank.",
       bodySchema: avisoSchema,
-      handler: async (_request, route) => {
+      handler: async (request, route) => {
+        if (!autorizarRotaPix(request, "recebido")) {
+          return Response.json({ ok: false }, { status: 401 });
+        }
         const aviso = await creditarPixRecebido(route.host.kv, route.body);
         if (aviso.estado !== "novo") {
           if (aviso.estado === "valor_invalido" || aviso.estado === "valor_divergente") {
@@ -62,7 +66,10 @@ export default defineChannel({
     POST("/asaas", {
       description: "Eventos Asaas de PIX recebido e de transferência.",
       bodySchema: z.unknown(),
-      handler: async (_request, route) => {
+      handler: async (request, route) => {
+        if (!autorizarRotaPix(request, "asaas")) {
+          return Response.json({ received: false }, { status: 401 });
+        }
         const evento = lerEventoAsaas(route.body);
         if (evento === undefined) return Response.json({ received: true });
         const aviso = avisoDePagamentoAsaas(evento);

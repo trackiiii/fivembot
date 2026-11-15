@@ -1,5 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
-
 import type { HostKvApi } from "@grok/agent-sdk";
 
 import { contarAgendamentosAtivos } from "../agenda.js";
@@ -22,6 +20,7 @@ import { configAtual, garantirConfig, gravarConfig, unirChatsAdmin } from "../co
 import { consultarTaxasGateway, rotuloLiquidacao, type TaxasPsp } from "../psp.js";
 import { dataHoraBrasil, formatarQuando } from "../horario.js";
 import { ehAdmin, emSandbox } from "../modo.js";
+import { tokenConfere } from "../segredo.js";
 import { detalheTaxaPixExterno } from "../taxa.js";
 import {
   aplicarFotoRascunho,
@@ -289,6 +288,9 @@ export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdm
 
 export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string): Promise<ResultadoAdmin> {
   await garantirConfig(kv);
+  if (!ehAdmin(chatId)) {
+    return { tela: { texto: "Acesso restrito à gerência.", teclado: [] }, aviso: "Acesso restrito à gerência." };
+  }
   const acao = parseAcao(dados);
   if (acao === undefined) return { tela: await montarTela(kv, chatId), aviso: "Operação inválida." };
   if (acao.tipo === "cancelar") {
@@ -527,6 +529,8 @@ export async function aplicarTextoAdmin(
   chatId: string,
   texto: string,
 ): Promise<ResultadoAdmin | undefined> {
+  await garantirConfig(kv);
+  if (!ehAdmin(chatId)) return undefined;
   const campo = await lerPendente(kv, chatId);
   if (campo === undefined) {
     const ui = await lerUi(kv, chatId);
@@ -676,6 +680,8 @@ export async function aplicarMidiaAdmin(
   chatId: string,
   midia: { fotoId?: string; caption?: string },
 ): Promise<ResultadoAdmin | undefined> {
+  await garantirConfig(kv);
+  if (!ehAdmin(chatId)) return undefined;
   const ui = await lerUi(kv, chatId);
   if (ui.aba !== "anuncio" && ui.aba !== "anunciook") return undefined;
   const aplicado = await aplicarFotoRascunho(kv, chatId, midia.fotoId, midia.caption);
@@ -800,13 +806,6 @@ function abaValida(valor: unknown): valor is AbaAdmin {
 
 function inteiro(valor: unknown, padrao: number): number {
   return typeof valor === "number" && Number.isSafeInteger(valor) && valor >= 0 ? valor : padrao;
-}
-
-function tokenConfere(recebido: string, esperado: string): boolean {
-  const a = Buffer.from(recebido);
-  const b = Buffer.from(esperado);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
 }
 
 async function lerPendente(kv: HostKvApi, chatId: string): Promise<CampoPendente | undefined> {

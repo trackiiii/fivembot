@@ -209,7 +209,7 @@ export function decidirTermos(texto: string): "concordo" | "recuso" | "pedir" | 
 
 export function chatDaSessao(continuationKey: string | null | undefined): string | undefined {
   if (continuationKey === undefined || continuationKey === null) return undefined;
-  const achado = continuationKey.match(/tg:(\d+):\d+/);
+  const achado = continuationKey.match(/^tg:(\d{1,16}):\d+$/);
   return achado?.[1];
 }
 

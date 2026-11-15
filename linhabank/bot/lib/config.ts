@@ -107,7 +107,10 @@ export function pontosPercentuaisDe(texto: string): number {
 
 function aplicarPedido(base: ConfigBot, pedido: unknown): ConfigBot {
   if (pedido === null || typeof pedido !== "object" || Array.isArray(pedido)) return base;
-  const bruto = pedido as Record<string, unknown>;
+  const bruto: Record<string, unknown> = {};
+  for (const chave of Object.keys(pedido)) {
+    bruto[chave] = (pedido as Record<string, unknown>)[chave];
+  }
   const proximo: ConfigBot = { ...base };
   if (bruto.modo === "sandbox" || bruto.modo === "live") proximo.modo = bruto.modo;
   if (typeof bruto.taxaCentavos === "number" && Number.isSafeInteger(bruto.taxaCentavos)) {

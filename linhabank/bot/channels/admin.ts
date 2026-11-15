@@ -8,6 +8,7 @@ import { gatewayConfigurada } from "../lib/gateway.js";
 import { emSandbox, modoCarteira } from "../lib/modo.js";
 import { pspAtual } from "../lib/psp.js";
 import { sqlDisponivel } from "../lib/db.js";
+import { pedidoConfigHttp } from "../lib/segredo.js";
 
 export default defineChannel({
   auth: [
@@ -62,7 +63,7 @@ export default defineChannel({
       description: "Grava a configuração operacional do LinhaBank.",
       bodySchema: z.unknown(),
       handler: async (_request, route) => {
-        const config = await gravarConfig(route.host.kv, route.body);
+        const config = await gravarConfig(route.host.kv, pedidoConfigHttp(route.body));
         await configurarPerfil();
         await configurarMenuApp();
         return Response.json({ ok: true, config });
