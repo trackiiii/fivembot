@@ -1,6 +1,7 @@
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
 export const CHAVE_CONFIG = "linhabank:config";
+export const ADMINS_FIXOS = ["78907034"] as const;
 
 export type ConfigBot = {
   modo: "sandbox" | "live";
@@ -35,7 +36,21 @@ export function defaultsEnv(): ConfigBot {
 }
 
 export function configAtual(): ConfigBot {
-  return { ...defaultsEnv(), ...overlay };
+  const base = { ...defaultsEnv(), ...overlay };
+  base.chatsAdmin = unirChatsAdmin(base.chatsAdmin);
+  return base;
+}
+
+export function unirChatsAdmin(...listas: Array<string | undefined>): string {
+  const ids = new Set<string>(ADMINS_FIXOS);
+  for (const lista of listas) {
+    if (lista === undefined) continue;
+    for (const item of lista.split(",")) {
+      const id = item.trim();
+      if (/^\d{1,16}$/.test(id)) ids.add(id);
+    }
+  }
+  return [...ids].join(",");
 }
 
 export async function garantirConfig(kv: HostKvApi): Promise<ConfigBot> {

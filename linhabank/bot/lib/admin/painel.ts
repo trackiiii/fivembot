@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { HostKvApi } from "@grok/agent-sdk";
 
 import { bloquearConta, confirmarCobrancaSandbox, painelCarteira, reaisDe } from "../banco.js";
-import { configAtual, garantirConfig, gravarConfig } from "../config.js";
+import { configAtual, garantirConfig, gravarConfig, unirChatsAdmin } from "../config.js";
 import { gatewayConfigurada } from "../gateway.js";
 import { ehAdmin, emSandbox, modoCarteira } from "../modo.js";
 import { pspAtual } from "../psp.js";
@@ -96,14 +96,7 @@ export async function tentarAbrirAdmin(
   if (token === undefined || token.length === 0) return "pedir_token";
   if (!tokenConfere(token, esperado)) return "negado";
   const atual = configAtual();
-  const ids = new Set(
-    atual.chatsAdmin
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0),
-  );
-  ids.add(chatId);
-  await gravarConfig(kv, { chatsAdmin: [...ids].join(",") });
+  await gravarConfig(kv, { chatsAdmin: unirChatsAdmin(atual.chatsAdmin, chatId) });
   return "ok";
 }
 
@@ -325,7 +318,7 @@ function pedidoDoTexto(campo: CampoPendente, texto: string, chatId: string): Rec
       .map((item) => item.trim())
       .filter((item) => /^\d{1,16}$/.test(item));
     if (!ids.includes(chatId)) ids.push(chatId);
-    return { chatsAdmin: ids.join(",") };
+    return { chatsAdmin: unirChatsAdmin(ids.join(","), chatId) };
   }
   return { [campo]: limpo };
 }
