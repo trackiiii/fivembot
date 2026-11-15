@@ -1,0 +1,25 @@
+import type { Fala } from "../tipos.js";
+
+export const clube: Fala[] = [
+  { id: "clu-s1", texto: "Você tem {lbcoins} LBcoins{nome}. Não é dinheiro nem Pix, tá? Era só conferir?" },
+  { id: "clu-s2", texto: "Saldo do Club: {lbcoins} LBcoins. Já entrou {ganho} indicando. Quer o convite pra indicar?" },
+  { id: "clu-s3", texto: "{lbcoins} LBcoins na conta{nome}. LBcoins não saem por Pix. Precisa de mais alguma coisa?" },
+  { id: "clu-s4", texto: "Olha: {lbcoins} LBcoins. Se quiser ganhar mais, a gente olha o seu convite." },
+  { id: "clu-s5", texto: "Tá com {lbcoins} LBcoins. Não é saldo em real. Era só conferir?" },
+  { id: "clu-c1", texto: "Você está no {categoria}{nome}, com {xp} XP. Pra Ouro faltam {faltaOuro} XP." },
+  { id: "clu-c2", texto: "Categoria {categoria}. {xp} XP agora. Faltam {faltaOuro} XP pro Ouro, com o limite de hoje." },
+  { id: "clu-c3", texto: "{categoria}, {xp} XP{nome}. A categoria sobe sozinha quando o XP chega. Quer o caminho do Ouro?" },
+  { id: "clu-c4", texto: "Hoje você é {categoria}. XP: {xp}. Ainda faltam {faltaOuro} pro Ouro." },
+  { id: "clu-i1", texto: "Seu código é {codigo}{nome}.\n\nConvite:\n{link}\n\nA recompensa só cai quando a indicação é aprovada. Só abrir o bot não credita." },
+  { id: "clu-i2", texto: "Pra indicar, manda esse link:\n{link}\n\nCódigo {codigo}. Você não pode indicar a si mesmo." },
+  { id: "clu-i3", texto: "Código {codigo}. Link: {link}. Quem abrir o bot ainda não te rende LBcoins — precisa da aprovação." },
+  { id: "clu-i4", texto: "Seu convite:\n{link}\n\nGuarda o código {codigo}. Cada pessoa só pode ser indicada uma vez." },
+  { id: "clu-m1", texto: "Você já indicou {indicadas} pessoa(s){nome}: {aprovadas} aprovada(s), {pendentes} pendente(s). Ganho real: {ganho} LBcoins." },
+  { id: "clu-m2", texto: "Indicações: {aprovadas} aprovada(s) e {pendentes} pendente(s), de {indicadas} no total. Entraram {ganho} LBcoins por isso." },
+  { id: "clu-m3", texto: "{indicadas} convite(s) no total. Aprovadas: {aprovadas}. Pendentes: {pendentes}. LBcoins ganhos indicando: {ganho}." },
+  { id: "clu-m4", texto: "Aprovadas {aprovadas}, pendentes {pendentes}. Ganho de indicação: {ganho} LBcoins. Indicou {indicadas} no total." },
+  { id: "clu-b1", texto: "No {categoria}, o que já vale:\n\n{beneficios}\n\nNada além disso. Se entrar um bônus extra, eu te falo com número." },
+  { id: "clu-b2", texto: "Benefícios da sua categoria ({categoria}):\n\n{beneficios}\n\nEu não anuncio o que ainda não existe." },
+  { id: "clu-b3", texto: "Olha o que o {categoria} tem hoje:\n\n{beneficios}" },
+  { id: "clu-b4", texto: "Categoria {categoria}. Benefícios de verdade:\n\n{beneficios}" },
+];
