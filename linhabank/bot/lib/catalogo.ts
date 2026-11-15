@@ -19,6 +19,7 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
   pix: {
     titulo: "PIX LinhaBank",
     fatos: [
+      "O PIX funciona 24 horas, inclusive de madrugada e no fim de semana.",
       "Enviar e receber PIX passa pela gateway. O saldo debitado ou creditado é o do LinhaBank.",
       "A chave interna, a agência e o número da conta não são chave PIX para outros bancos.",
       "A Thialinha confirma o PIX enviado só com o endToEndId da gateway.",

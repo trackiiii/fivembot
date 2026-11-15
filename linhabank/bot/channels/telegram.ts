@@ -155,7 +155,7 @@ async function falar(
   memoria.nome = atualizacao.nome;
   const aberta = (await lerConta(deps.kv, atualizacao.chatId)) !== undefined;
   try {
-    await mostrarDigitando(atualizacao.chatId);
+    void mostrarDigitando(atualizacao.chatId);
     await deps.send(montarEntrada(texto, memoria, { aberta, acabouDeAbrir }), {
       continuationToken: `tg:${atualizacao.chatId}:${atualizacao.updateId}`,
       title: `Telegram ${atualizacao.chatId}`,
