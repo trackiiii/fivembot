@@ -15,6 +15,6 @@ export default defineAgent({
   tools: [],
   hosting: {
     egressDomains: ["api.telegram.org"],
-    secretNames: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET"],
+    secretNames: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "PIX_GATEWAY_TOKEN", "PIX_GATEWAY_WEBHOOK_SECRET"],
   },
 });

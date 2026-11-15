@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { HostKvApi, JsonObject, JsonValue } from "@grok/agent-sdk";
 import * as z from "zod/v4";
 
+import { TEXTO_TERMOS, type ResumoConta } from "./banco.js";
+
 carregarEnvLocal();
 
 function carregarEnvLocal(): void {
@@ -20,7 +22,7 @@ function carregarEnvLocal(): void {
     const igual = limpa.indexOf("=");
     if (igual <= 0) continue;
     const chave = limpa.slice(0, igual).trim();
-    if (!/^TELEGRAM_[A-Z0-9_]+$/.test(chave)) continue;
+    if (!/^(?:TELEGRAM|PIX_GATEWAY)_[A-Z0-9_]+$/.test(chave)) continue;
     if (process.env[chave] !== undefined && process.env[chave] !== "") continue;
     let valor = limpa.slice(igual + 1).trim();
     if (
@@ -65,6 +67,15 @@ export type Atualizacao =
       nome: string;
       texto: string;
       updateId: number;
+    }
+  | {
+      tipo: "callback";
+      chatId: string;
+      mensagemId: number;
+      nome: string;
+      updateId: number;
+      callbackId: string;
+      decisao: "concordo" | "recuso" | "ignorar";
     };
 
 const mensagemSchema = z.object({
@@ -85,6 +96,27 @@ const mensagemSchema = z.object({
 const atualizacaoSchema = z.object({
   update_id: z.number().int(),
   message: mensagemSchema.optional(),
+  callback_query: z
+    .object({
+      id: z.string(),
+      data: z.string().optional(),
+      from: z
+        .object({
+          first_name: z.string().optional(),
+          is_bot: z.boolean().optional(),
+        })
+        .optional(),
+      message: z
+        .object({
+          message_id: z.number().int(),
+          chat: z.object({
+            id: z.number().int(),
+            type: z.string(),
+          }),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export function memoriaVazia(): MemoriaChat {
@@ -137,7 +169,26 @@ export function nomeSeguro(valor: string | undefined): string {
 
 export function interpretarAtualizacao(corpo: unknown): Atualizacao {
   const lido = atualizacaoSchema.safeParse(corpo);
-  if (!lido.success || lido.data.message === undefined) return { tipo: "ignorar" };
+  if (!lido.success) return { tipo: "ignorar" };
+  const callback = lido.data.callback_query;
+  if (callback !== undefined) {
+    if (callback.from?.is_bot === true) return { tipo: "ignorar" };
+    const chat = callback.message?.chat;
+    if (chat !== undefined && chat.type !== "private") return { tipo: "ignorar" };
+    if (chat === undefined) return { tipo: "ignorar" };
+    const data = callback.data ?? "";
+    const decisao = data === "termos:concordo" ? "concordo" : data === "termos:recuso" ? "recuso" : "ignorar";
+    return {
+      tipo: "callback",
+      chatId: String(chat.id),
+      mensagemId: callback.message?.message_id ?? 0,
+      nome: nomeSeguro(callback.from?.first_name),
+      updateId: lido.data.update_id,
+      callbackId: callback.id,
+      decisao,
+    };
+  }
+  if (lido.data.message === undefined) return { tipo: "ignorar" };
   const mensagem = lido.data.message;
   if (mensagem.chat.type !== "private" || mensagem.from?.is_bot === true) {
     return { tipo: "ignorar" };
@@ -153,13 +204,14 @@ export function interpretarAtualizacao(corpo: unknown): Atualizacao {
   return { tipo: "texto", ...base, texto };
 }
 
-export function montarEntrada(mensagem: string, memoria: MemoriaChat): string {
+export function montarEntrada(mensagem: string, memoria: MemoriaChat, conta: ResumoConta): string {
   return JSON.stringify({
     mensagem,
     contexto: {
       nome: memoria.nome,
       historico: memoria.historico,
       protocolos: memoria.protocolos,
+      conta,
     },
   });
 }
@@ -334,7 +386,7 @@ export async function configurarPerfil(): Promise<boolean> {
   });
   await chamarTelegram("setMyDescription", {
     description:
-      "A Thialinha atende você no LinhaBank. Ela explica conta, PIX e cartão e abre protocolo. Ela não acessa a sua conta.",
+      "A Thialinha cuida da sua conta no LinhaBank. Cada conta tem o próprio saldo na gateway de PIX.",
   });
   await chamarTelegram("setMyCommands", { commands: comandos });
   return true;
@@ -371,7 +423,7 @@ export async function lerAtualizacoes(
       body: JSON.stringify({
         offset,
         timeout: 25,
-        allowed_updates: ["message"],
+        allowed_updates: ["message", "callback_query"],
       }),
     });
     const json = (await resposta.json().catch(() => null)) as { ok?: boolean; result?: unknown } | null;
@@ -389,3 +441,24 @@ export const RESPOSTA_SEM_TEXTO =
 
 export const AVISO_FALHA =
   "Tive um problema para responder agora. Manda de novo daqui a pouco que eu te ajudo.";
+
+export async function enviarTermos(chatId: string, mensagemId?: number): Promise<boolean> {
+  const corpo: Record<string, unknown> = {
+    chat_id: chatId,
+    text: TEXTO_TERMOS,
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "Concordo", callback_data: "termos:concordo" },
+          { text: "Agora não", callback_data: "termos:recuso" },
+        ],
+      ],
+    },
+  };
+  if (mensagemId !== undefined && mensagemId > 0) corpo.reply_parameters = { message_id: mensagemId };
+  return chamarTelegram("sendMessage", corpo);
+}
+
+export async function responderCallback(callbackId: string): Promise<void> {
+  await chamarTelegram("answerCallbackQuery", { callback_query_id: callbackId });
+}

@@ -28,6 +28,7 @@ Run the CLI under Node, never Bun.
 
 - A fala da Thialinha fica em `bot/instructions.md`.
 - O histórico de cada chat do Telegram fica em `ctx.host.kv`, na chave `linhabank:chat:<id>`.
+- Cada chat tem a própria conta. O kv guarda número, chave e cartão. O saldo fica na gateway de PIX, um saldo por conta.
 - Não reative o diário compartilhado. Um `memoryHook` mistura mensagens de clientes diferentes.
 
 ## Do not

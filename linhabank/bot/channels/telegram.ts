@@ -3,6 +3,7 @@ import { defineChannel, localDevStrict, POST, sharedSecretAuth } from "@grok/age
 import type { ChannelStartArgs } from "@grok/agent-sdk";
 import * as z from "zod/v4";
 
+import { aceitarTermos, decidirTermos, lerConta, TEXTO_RECUSA } from "../lib/banco.js";
 import {
   type Atualizacao,
   type EstadoTelegram,
@@ -11,6 +12,7 @@ import {
   chaveEntrega,
   chaveUpdate,
   configurarPerfil,
+  enviarTermos,
   enviarTexto,
   gravarOffset,
   idDaAtualizacao,
@@ -21,6 +23,7 @@ import {
   montarEntrada,
   mostrarDigitando,
   registrarTroca,
+  responderCallback,
   soltarWebhook,
 } from "../lib/atendimento.js";
 
@@ -112,18 +115,55 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     return;
   }
 
+  if (atualizacao.tipo === "callback") {
+    await responderCallback(atualizacao.callbackId);
+    if (atualizacao.decisao === "ignorar") return;
+    if (atualizacao.decisao === "recuso") {
+      if ((await lerConta(deps.kv, atualizacao.chatId)) === undefined) {
+        await enviarTexto(atualizacao.chatId, TEXTO_RECUSA, atualizacao.mensagemId);
+      }
+      return;
+    }
+    const jaTinha = (await lerConta(deps.kv, atualizacao.chatId)) !== undefined;
+    await aceitarTermos(deps.kv, atualizacao.chatId, atualizacao.nome);
+    await falar(deps, atualizacao, "CONCORDO", !jaTinha);
+    return;
+  }
+
+  const decisao = decidirTermos(atualizacao.texto);
+  const existente = await lerConta(deps.kv, atualizacao.chatId);
+  if (existente === undefined && decisao === "pedir") {
+    await enviarTermos(atualizacao.chatId, atualizacao.mensagemId);
+    return;
+  }
+  if (existente === undefined && decisao === "recuso") {
+    await enviarTexto(atualizacao.chatId, TEXTO_RECUSA, atualizacao.mensagemId);
+    return;
+  }
+  const abriuAgora = existente === undefined && decisao === "concordo";
+  if (abriuAgora) await aceitarTermos(deps.kv, atualizacao.chatId, atualizacao.nome);
+  await falar(deps, atualizacao, atualizacao.texto, abriuAgora);
+}
+
+async function falar(
+  deps: Despacho,
+  atualizacao: MensagemRecebida,
+  texto: string,
+  acabouDeAbrir: boolean,
+): Promise<void> {
   const memoria = await lerMemoria(deps.kv, atualizacao.chatId);
   memoria.nome = atualizacao.nome;
+  const aberta = (await lerConta(deps.kv, atualizacao.chatId)) !== undefined;
   try {
     await mostrarDigitando(atualizacao.chatId);
-    await deps.send(montarEntrada(atualizacao.texto, memoria), {
+    await deps.send(montarEntrada(texto, memoria, { aberta, acabouDeAbrir }), {
       continuationToken: `tg:${atualizacao.chatId}:${atualizacao.updateId}`,
       title: `Telegram ${atualizacao.chatId}`,
       state: {
         chatId: atualizacao.chatId,
         updateId: atualizacao.updateId,
         mensagemId: atualizacao.mensagemId,
-        textoCliente: atualizacao.texto,
+        textoCliente: texto,
         nome: atualizacao.nome,
       },
     });
@@ -133,7 +173,7 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
       updateId: atualizacao.updateId,
       mensagemId: atualizacao.mensagemId,
       nome: atualizacao.nome,
-      textoCliente: atualizacao.texto,
+      textoCliente: texto,
       resposta: AVISO_FALHA,
       sessionId: "sem-turno",
     });
