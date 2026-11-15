@@ -13,11 +13,12 @@ Este projeto **não está em produção**. O Asaas pode estar ligado para PIX, m
 - Depósito PIX com QR Code e copia e cola. Com Asaas, o QR é estático (`POST /v3/pix/qrCodes/static`). O saldo **não** sobe na geração. Sobe só no webhook `PAYMENT_RECEIVED`, ou no simulador de homologação.
 - Histórico no ledger (lançamentos não são apagados). Comprovante `LB-…` em cada movimentação.
 - Transferência, boleto, cartão virtual, PIX agendado e protocolo.
-- Gerência no Telegram: `/admin` abre o painel operacional (custódia, contas, ficha, extrato, tesouraria PIX, movimento e tarifas). Bloqueio de conta e cartão, liquidação em homologação, cancelamento de cobrança e parametrização. Sem página web.
+- Gerência no Telegram: `/admin` abre o painel operacional (custódia, contas, ficha, extrato, tesouraria PIX, movimento, tarifas, anúncio e Clube). Bloqueio de conta e cartão, liquidação em homologação, cancelamento de cobrança, parametrização, LBcoins e indicações. Sem página web.
 - **Atualizar** no painel consulta o custo vigente da gateway (`GET /v3/myAccount/fees/` no Asaas) e não altera o adicional LinhaBank. Em Tarifas, **Adicional R$** e **Adicional %** personalizam a margem em cima da gateway. PIX interno continua isento. Convênio HTTP não informa o custo da gateway.
 - Cada depósito, envio e recebimento de qualquer cliente é publicado no canal de movimento do Telegram (`LINHABANK_CANAL_MOVIMENTO` ou, se vazio, nos chats dos operadores). Sem copia e cola e sem a Thialinha.
 - Foto de comprovante **não** credita saldo.
-- A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo. Sem teclado extra no chat.
+- A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ, Club). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo.
+- LINHABANK CLUB (`/club`): LBcoins, categorias Bronze/Prata/Ouro por XP e programa INDIQUE E GANHE. LBcoins não são dinheiro, Pix nem saldo sacável. Indicação só credita depois da aprovação (padrão: análise da gerência). O teclado do Club só aparece quando o cliente abre `/club`.
 - Mini-app do Telegram em `/v1/channels/app/`. Saldo, depósito PIX, envio com confirmação e extrato da mesma conta. O botão nativo **LinhaBank** só aparece com `TELEGRAM_WEBAPP_URL` em HTTPS.
 
 ## O que ainda não está pronto para dinheiro real
@@ -66,8 +67,16 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | `LINHABANK_CANAL_MOVIMENTO` | Chat id do canal de movimento (ex.: `-100…` ou `@canal`). Sem isso, o feed vai para os operadores. O bot precisa ser admin do canal |
 | `DATABASE_URL` | PostgreSQL. Sem isso, o ledger usa o KV |
 | `LINHABANK_DB_PATH` | PGlite em arquivo, para teste local com SQL |
+| `TELEGRAM_BOT_USERNAME` | Username do bot, sem `@`, para o link `t.me/…?start=CODIGO`. Sem isso, o bot consulta `getMe` |
+| `LBCOINS_INDICACAO` | LBcoins por indicação aprovada (padrão 500). Zero desliga o crédito |
+| `LINHABANK_INDICACAO_CRITERIO` | `manual` (padrão) ou `conta_aberta`. Não exige depósito |
+| `LINHABANK_XP_PRATA` | XP mínimo da Prata (padrão 1000) |
+| `LINHABANK_XP_OURO` | XP mínimo do Ouro (padrão 5000) |
+| `LINHABANK_XP_INDICACAO` | XP creditado ao indicador na aprovação (padrão 100) |
+| `LINHABANK_BENEFICIO_PRATA` | Texto extra de benefício da Prata. Vazio = só o que já existe |
+| `LINHABANK_BENEFICIO_OURO` | Texto extra de benefício do Ouro. Vazio = só o que já existe |
 
-Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`. As falas da Thialinha no chat começam com o nome em negrito. O admin abre `/admin` no mesmo chat, com botões.
+Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia; com código: registra indicação), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`, `/club`. As falas da Thialinha no chat começam com o nome em negrito. O admin abre `/admin` no mesmo chat, com botões. No Clube, a gerência aprova indicações, ajusta LBcoins/XP com justificativa e configura recompensa e faixas de XP.
 
 ## Webhooks
 
@@ -84,7 +93,7 @@ O corpo do PIX recebido leva `id` (idempotente), `valorCentavos` e um destes: `t
 
 Os lançamentos são imutáveis. Estorno de PIX recusado pela gateway vira um crédito novo, não uma exclusão. Transferência entre contas trava as duas contas, debita e credita na mesma transação.
 
-Com `DATABASE_URL`, rode `npm run migrate` e o schema em `migrations/`. Sem Postgres, o mesmo modelo roda no KV, com trava por conta.
+Com `DATABASE_URL`, rode `npm run migrate` e o schema em `migrations/` (`001_wallet.sql`, `002_cobranca_taxa.sql`, `003_fidelidade.sql`). Sem Postgres, o mesmo modelo (carteira BRL e LBcoins) roda no KV, com trava por conta.
 
 ## Publicação
 

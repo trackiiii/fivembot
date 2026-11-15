@@ -19,6 +19,13 @@ export type ConfigBot = {
   chatsAdmin: string;
   canalMovimento: string;
   nomeExibido: string;
+  lbcoinsIndicacao: number;
+  indicacaoCriterio: "manual" | "conta_aberta";
+  xpPrata: number;
+  xpOuro: number;
+  xpIndicacao: number;
+  beneficioPrata: string;
+  beneficioOuro: string;
 };
 
 let overlay: Partial<ConfigBot> = {};
@@ -40,6 +47,13 @@ export function defaultsEnv(): ConfigBot {
     chatsAdmin: (process.env.LINHABANK_ADMIN_CHATS ?? "").trim(),
     canalMovimento: (process.env.LINHABANK_CANAL_MOVIMENTO ?? "").trim(),
     nomeExibido: (process.env.LINHABANK_NOME ?? "LinhaBank").trim() || "LinhaBank",
+    lbcoinsIndicacao: inteiroEnv(process.env.LBCOINS_INDICACAO, 500, 1_000_000),
+    indicacaoCriterio: process.env.LINHABANK_INDICACAO_CRITERIO?.trim() === "conta_aberta" ? "conta_aberta" : "manual",
+    xpPrata: inteiroEnv(process.env.LINHABANK_XP_PRATA, 1000, 1_000_000) || 1000,
+    xpOuro: inteiroEnv(process.env.LINHABANK_XP_OURO, 5000, 5_000_000) || 5000,
+    xpIndicacao: inteiroEnv(process.env.LINHABANK_XP_INDICACAO, 100, 100_000),
+    beneficioPrata: (process.env.LINHABANK_BENEFICIO_PRATA ?? "").trim(),
+    beneficioOuro: (process.env.LINHABANK_BENEFICIO_OURO ?? "").trim(),
   };
 }
 
@@ -140,6 +154,23 @@ function aplicarPedido(base: ConfigBot, pedido: unknown): ConfigBot {
     const nome = bruto.nomeExibido.trim().slice(0, 32);
     if (nome.length >= 2) proximo.nomeExibido = nome;
   }
+  if (typeof bruto.lbcoinsIndicacao === "number" && Number.isSafeInteger(bruto.lbcoinsIndicacao)) {
+    proximo.lbcoinsIndicacao = Math.max(0, Math.min(1_000_000, bruto.lbcoinsIndicacao));
+  }
+  if (bruto.indicacaoCriterio === "manual" || bruto.indicacaoCriterio === "conta_aberta") {
+    proximo.indicacaoCriterio = bruto.indicacaoCriterio;
+  }
+  if (typeof bruto.xpPrata === "number" && Number.isSafeInteger(bruto.xpPrata)) {
+    proximo.xpPrata = Math.max(0, Math.min(1_000_000, bruto.xpPrata));
+  }
+  if (typeof bruto.xpOuro === "number" && Number.isSafeInteger(bruto.xpOuro)) {
+    proximo.xpOuro = Math.max(proximo.xpPrata + 1, Math.min(5_000_000, bruto.xpOuro));
+  }
+  if (typeof bruto.xpIndicacao === "number" && Number.isSafeInteger(bruto.xpIndicacao)) {
+    proximo.xpIndicacao = Math.max(0, Math.min(100_000, bruto.xpIndicacao));
+  }
+  if (typeof bruto.beneficioPrata === "string") proximo.beneficioPrata = bruto.beneficioPrata.trim().slice(0, 240);
+  if (typeof bruto.beneficioOuro === "string") proximo.beneficioOuro = bruto.beneficioOuro.trim().slice(0, 240);
   return proximo;
 }
 

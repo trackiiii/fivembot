@@ -135,6 +135,34 @@ export function classificarTexto(textoBruto: string, pendente?: "valor_deposito"
     return { categoria: "faq", confianca: 0.88 };
   }
 
+  if (
+    tem(texto, [
+      "lbcoins",
+      "lb coin",
+      "categoria",
+      "indique",
+      "indicacao",
+      "indicação",
+      "meu codigo",
+      "meu código",
+      "chegar no ouro",
+      "chegar ao ouro",
+      "linhabank club",
+      "clube",
+      "recompensa",
+      "meus beneficios",
+      "meus benefícios",
+      "quantas pessoas eu ja indiquei",
+      "quantas pessoas eu já indiquei",
+      "indiquei",
+      "indicando",
+      "codigo de indica",
+      "código de indica",
+    ])
+  ) {
+    return { categoria: "clube", confianca: 0.93 };
+  }
+
   if (tem(texto, ["saldo", "quanto tenho", "quanto tem na conta", "quanto tem na minha", "meu dinheiro"])) {
     return { categoria: "saldo", confianca: 0.92 };
   }

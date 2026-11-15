@@ -23,7 +23,7 @@ function carregarEnvLocal(): void {
     const igual = limpa.indexOf("=");
     if (igual <= 0) continue;
     const chave = limpa.slice(0, igual).trim();
-    if (!/^(?:TELEGRAM|PIX_GATEWAY|PIX_TAXA|PIX_RECEBIMENTO|LINHABANK|ADMIN|ASAAS)_[A-Z0-9_]+$/.test(chave)) continue;
+    if (!/^(?:TELEGRAM|PIX_GATEWAY|PIX_TAXA|PIX_RECEBIMENTO|LINHABANK|ADMIN|ASAAS|LBCOINS)_[A-Z0-9_]+$/.test(chave)) continue;
     if (process.env[chave] !== undefined && process.env[chave] !== "") continue;
     let valor = limpa.slice(igual + 1).trim();
     if (
@@ -86,7 +86,7 @@ export type Atualizacao =
       updateId: number;
       callbackId: string;
       dados: string;
-      decisao: "concordo" | "recuso" | "admin" | "ignorar";
+      decisao: "concordo" | "recuso" | "admin" | "clube" | "ignorar";
     };
 
 export type TecladoInline = { text: string; callback_data: string }[][];
@@ -237,7 +237,9 @@ export function interpretarAtualizacao(corpo: unknown): Atualizacao {
           ? "recuso"
           : data.startsWith("a:")
             ? "admin"
-            : "ignorar";
+            : data.startsWith("c:")
+              ? "clube"
+              : "ignorar";
     return {
       tipo: "callback",
       chatId: String(chat.id),
@@ -574,6 +576,7 @@ const COMANDOS_CLIENTE = [
   { command: "saldo", description: "Ver o saldo da conta" },
   { command: "extrato", description: "Ver o histórico da conta" },
   { command: "depositar", description: "Gerar QR Code para depósito PIX" },
+  { command: "club", description: "Abrir o LINHABANK CLUB" },
 ];
 
 export async function configurarPerfil(): Promise<boolean> {
@@ -585,7 +588,7 @@ export async function configurarPerfil(): Promise<boolean> {
   });
   await chamarTelegram("setMyDescription", {
     description:
-      "A Thialinha cuida da sua conta no LinhaBank. Saldo, PIX, PIX agendado, transferência e cartão virtual ficam neste chat. O app abre no botão LinhaBank ao lado da mensagem.",
+      "A Thialinha cuida da sua conta no LinhaBank. Saldo, PIX, PIX agendado, transferência, cartão virtual e o LINHABANK CLUB ficam neste chat. O app abre no botão LinhaBank ao lado da mensagem.",
   });
   await chamarTelegram("setMyCommands", { commands: comandos });
   await configurarMenuApp();

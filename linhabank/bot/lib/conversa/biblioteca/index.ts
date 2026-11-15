@@ -1,3 +1,4 @@
+import { clube } from "./clube.js";
 import { cadastro, comprovantes, extratos, faq, linhabank, saldo } from "./conta.js";
 import { confirmados, depositoGerado, depositos, pendentes, transferencias } from "./pix.js";
 import { agradecimentos, apresentacao, despedidas, informal, saudacoes } from "./sociais.js";
@@ -25,6 +26,7 @@ export const BIBLIOTECA: Record<Categoria, Fala[]> = {
   agradecimentos,
   despedidas,
   incompreensao,
+  clube,
 };
 
 export const FALAS_DEPOSITO_GERADO = depositoGerado;

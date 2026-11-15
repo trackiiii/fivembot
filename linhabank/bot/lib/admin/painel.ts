@@ -31,6 +31,16 @@ import {
   telaAnuncio,
   telaConfirmarAnuncio,
 } from "./anuncio.js";
+import { blocoFichaClube, telaClube, telaMovimentoClube } from "./clube.js";
+import {
+  ajustarLbcoinsAdmin,
+  ajustarXpAdmin,
+  bloquearRecompensas,
+  consultarClube,
+  decidirIndicacao,
+  listarPendentes,
+  rotuloCategoria,
+} from "../fidelidade/index.js";
 
 export const CHAVE_UI = (chatId: string) => `linhabank:admin:ui:${chatId}`;
 export const CHAVE_PENDENTE = (chatId: string) => `linhabank:admin:pendente:${chatId}`;
@@ -47,7 +57,9 @@ export type AbaAdmin =
   | "ficha"
   | "extrato"
   | "anuncio"
-  | "anunciook";
+  | "anunciook"
+  | "clube"
+  | "clubemov";
 export type CampoPendente =
   | "nomeExibido"
   | "chaveRecebimento"
@@ -58,7 +70,15 @@ export type CampoPendente =
   | "webappUrl"
   | "chatsAdmin"
   | "canalMovimento"
-  | "busca";
+  | "busca"
+  | "lbcoinsIndicacao"
+  | "xpPrata"
+  | "xpOuro"
+  | "xpIndicacao"
+  | "beneficioPrata"
+  | "beneficioOuro"
+  | "lbcoinsAjuste"
+  | "xpAjuste";
 
 export type BotaoAdmin = { text: string; callback_data: string };
 
@@ -73,6 +93,7 @@ export type ResultadoAdmin = {
   aviso?: string;
   atualizarPerfil?: boolean;
   avisoCliente?: { chatId: string; texto: string };
+  avisosCliente?: { chatId: string; texto: string }[];
 };
 
 export type UiAdmin = {
@@ -94,6 +115,12 @@ const CAMPOS: Record<string, Exclude<CampoPendente, "busca">> = {
   w: "webappUrl",
   s: "chatsAdmin",
   m: "canalMovimento",
+  l: "lbcoinsIndicacao",
+  p: "xpPrata",
+  q: "xpOuro",
+  x: "xpIndicacao",
+  j: "beneficioPrata",
+  y: "beneficioOuro",
 };
 
 const ROTULO_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
@@ -106,6 +133,14 @@ const ROTULO_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   webappUrl: "endereço HTTPS do aplicativo",
   chatsAdmin: "chat id dos operadores, separados por vírgula",
   canalMovimento: "canal de movimento no Telegram",
+  lbcoinsIndicacao: "LBcoins por indicação aprovada",
+  xpPrata: "XP mínimo da categoria Prata",
+  xpOuro: "XP mínimo da categoria Ouro",
+  xpIndicacao: "XP creditado ao indicador na aprovação",
+  beneficioPrata: "benefício extra da Prata",
+  beneficioOuro: "benefício extra do Ouro",
+  lbcoinsAjuste: "ajuste de LBcoins",
+  xpAjuste: "ajuste de XP",
 };
 
 const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
@@ -118,6 +153,14 @@ const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   webappUrl: "Opcional. Somente HTTPS.",
   chatsAdmin: "Somente números. O seu chat permanece na lista.",
   canalMovimento: "Chat id do canal (ex.: -1001234567890) ou @usuario. Envie - para avisar só os operadores.",
+  lbcoinsIndicacao: "Número inteiro. Ex.: 500. Zero desliga o crédito automático.",
+  xpPrata: "Número inteiro. Ex.: 1000.",
+  xpOuro: "Número inteiro, maior que o XP da Prata. Ex.: 5000.",
+  xpIndicacao: "Número inteiro. Ex.: 100. Zero não dá XP na indicação.",
+  beneficioPrata: "Texto curto. Vazio usa o texto padrão honesto.",
+  beneficioOuro: "Texto curto. Vazio usa o texto padrão honesto.",
+  lbcoinsAjuste: "Quantidade (positiva ou negativa) e o motivo. Ex.: 100 bônus de campanha.",
+  xpAjuste: "Quantidade de XP (positiva ou negativa) e o motivo. Ex.: 50 correção.",
 };
 
 const ROTULO_MOVIMENTO: Record<string, string> = {
@@ -198,8 +241,14 @@ export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdm
   if (ui.aba === "ledger") return telaMovimento(painel, ui.pagina);
   if (ui.aba === "config") return telaParametros(config, await lerTaxasGateway(kv));
   if (ui.aba === "mais") return telaMais(config);
-  if (ui.aba === "ficha") return telaFicha(painel, ui.indice ?? 0);
+  if (ui.aba === "ficha") return telaFicha(kv, painel, ui.indice ?? 0);
   if (ui.aba === "extrato") return telaExtrato(kv, painel, ui.indice ?? 0);
+  if (ui.aba === "clube") return telaClube(kv, nav("clube"));
+  if (ui.aba === "clubemov") {
+    const conta = painel.contas[ui.indice ?? 0];
+    if (conta === undefined) return { texto: "Conta não localizada.", teclado: nav("contas") };
+    return telaMovimentoClube(kv, conta.chatId, `${conta.numero}  ${conta.nome}`, nav("contas"), ui.indice ?? 0);
+  }
   if (ui.aba === "anuncio") return telaAnuncio(kv, chatId, nav("anuncio"));
   if (ui.aba === "anunciook") {
     const rascunho = await lerRascunho(kv, chatId);
@@ -256,6 +305,10 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
   }
   if (acao.tipo === "pedir") {
     await kv.put(CHAVE_PENDENTE(chatId), acao.campo);
+    if (acao.indice !== undefined) {
+      const ui = await lerUi(kv, chatId);
+      await gravarUi(kv, chatId, { ...ui, indice: acao.indice });
+    }
     return { tela: telaPendente(acao.campo) };
   }
   if (acao.tipo === "anuncio_limpar") {
@@ -303,6 +356,56 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
         ? "Nenhuma conta para receber o comunicado."
         : `Comunicado enviado. ${envio.entregues} entregue(s), ${envio.falhas} falha(s).`;
     return { tela: await montarTela(kv, chatId), aviso };
+  }
+  if (acao.tipo === "criterio") {
+    await gravarConfig(kv, { indicacaoCriterio: acao.criterio });
+    await gravarUi(kv, chatId, { aba: "clube", pagina: 0 });
+    return { tela: await montarTela(kv, chatId), aviso: "Critério de indicação gravado." };
+  }
+  if (acao.tipo === "aprovar_indicacao" || acao.tipo === "rejeitar_indicacao") {
+    const pendentes = await listarPendentes(kv);
+    const item = pendentes[acao.indice];
+    if (item === undefined) {
+      await gravarUi(kv, chatId, { aba: "clube", pagina: 0 });
+      return { tela: await montarTela(kv, chatId), aviso: "Indicação não localizada." };
+    }
+    const dec = await decidirIndicacao(
+      kv,
+      item.id,
+      acao.tipo === "aprovar_indicacao" ? "aprovada" : "rejeitada",
+      chatId,
+      acao.tipo === "aprovar_indicacao" ? "Aprovação da gerência." : "Rejeição da gerência.",
+    );
+    await gravarUi(kv, chatId, { aba: "clube", pagina: 0 });
+    const avisos = [dec.avisoIndicador, dec.avisoIndicado].filter((item): item is { chatId: string; texto: string } => item !== undefined);
+    if (dec.subiu !== undefined) {
+      avisos.push({
+        chatId: dec.subiu.chatId,
+        texto: `Sua categoria no Club subiu de ${rotuloCategoria(dec.subiu.de)} para ${rotuloCategoria(dec.subiu.para)}.`,
+      });
+    }
+    return {
+      tela: await montarTela(kv, chatId),
+      aviso: dec.ok
+        ? acao.tipo === "aprovar_indicacao"
+          ? "Indicação aprovada."
+          : "Indicação recusada."
+        : `Indicação não alterada (${dec.motivo ?? "erro"}).`,
+      avisosCliente: avisos,
+    };
+  }
+  if (acao.tipo === "recompensas") {
+    const painel = await painelCarteira(kv);
+    const conta = painel.contas[acao.indice];
+    if (conta === undefined) return { tela: await montarTela(kv, chatId), aviso: "Conta não localizada." };
+    const resumo = await consultarClube(kv, conta.chatId);
+    const bloquear = resumo?.recompensasBloqueadas !== true;
+    await bloquearRecompensas(kv, chatId, conta.chatId, bloquear, "Ajuste da gerência.");
+    await gravarUi(kv, chatId, { aba: "ficha", pagina: 0, indice: acao.indice });
+    return {
+      tela: await montarTela(kv, chatId),
+      aviso: bloquear ? "Recompensas bloqueadas nesta conta." : "Recompensas liberadas nesta conta.",
+    };
   }
   if (acao.tipo === "toggle") {
     const atual = configAtual();
@@ -375,6 +478,44 @@ export async function aplicarTextoAdmin(
     return { tela: await montarTela(kv, chatId), aviso: "Texto gravado no rascunho." };
   }
   await garantirConfig(kv);
+  if (campo === "lbcoinsAjuste" || campo === "xpAjuste") {
+    const ui = await lerUi(kv, chatId);
+    const painel = await painelCarteira(kv);
+    const conta = painel.contas[ui.indice ?? -1];
+    if (conta === undefined) {
+      await kv.delete(CHAVE_PENDENTE(chatId));
+      return { tela: await montarTela(kv, chatId), aviso: "Conta não localizada." };
+    }
+    const ajuste = parseAjusteQuantidade(texto);
+    if (ajuste === undefined) {
+      return { tela: { ...telaPendente(campo), aviso: "Informe quantidade e motivo. Ex.: 100 bônus de campanha." } };
+    }
+    await kv.delete(CHAVE_PENDENTE(chatId));
+    if (campo === "lbcoinsAjuste") {
+      const resultado = await ajustarLbcoinsAdmin(kv, chatId, conta.chatId, ajuste.quantidade, ajuste.motivo);
+      await gravarUi(kv, chatId, { aba: "ficha", pagina: 0, indice: ui.indice });
+      return {
+        tela: await montarTela(kv, chatId),
+        aviso: resultado.ok ? `LBcoins ajustados (${ajuste.quantidade}).` : `Ajuste recusado (${resultado.motivo}).`,
+      };
+    }
+    const xp = await ajustarXpAdmin(kv, chatId, conta.chatId, ajuste.quantidade, ajuste.motivo);
+    await gravarUi(kv, chatId, { aba: "ficha", pagina: 0, indice: ui.indice });
+    const avisos =
+      xp.subiu === undefined
+        ? undefined
+        : [
+            {
+              chatId: conta.chatId,
+              texto: `Sua categoria no Club subiu de ${rotuloCategoria(xp.subiu.de)} para ${rotuloCategoria(xp.subiu.para)}.`,
+            },
+          ];
+    return {
+      tela: await montarTela(kv, chatId),
+      aviso: xp.ok ? `XP ajustado (${ajuste.quantidade}).` : `Ajuste recusado (${xp.motivo ?? "erro"}).`,
+      avisosCliente: avisos,
+    };
+  }
   if (campo === "busca") {
     const painel = await painelCarteira(kv);
     const achadas = filtrarContas(painel.contas, texto);
@@ -386,7 +527,7 @@ export async function aplicarTextoAdmin(
     const indice = painel.contas.findIndex((item) => item.chatId === achadas[0].chatId);
     await gravarUi(kv, chatId, { aba: achadas.length === 1 ? "ficha" : "contas", pagina: 0, indice });
     return {
-      tela: achadas.length === 1 ? telaFicha(painel, indice) : telaContasFiltradas(painel, achadas),
+      tela: achadas.length === 1 ? await telaFicha(kv, painel, indice) : telaContasFiltradas(painel, achadas),
       aviso: achadas.length === 1 ? `Conta ${achadas[0].numero}.` : `${achadas.length} contas encontradas.`,
     };
   }
@@ -396,7 +537,16 @@ export async function aplicarTextoAdmin(
   }
   await gravarConfig(kv, pedido);
   await kv.delete(CHAVE_PENDENTE(chatId));
-  await gravarUi(kv, chatId, { aba: "config", pagina: 0 });
+  const abaConfig =
+    campo === "lbcoinsIndicacao" ||
+    campo === "xpPrata" ||
+    campo === "xpOuro" ||
+    campo === "xpIndicacao" ||
+    campo === "beneficioPrata" ||
+    campo === "beneficioOuro"
+      ? "clube"
+      : "config";
+  await gravarUi(kv, chatId, { aba: abaConfig, pagina: 0 });
   return {
     tela: await montarTela(kv, chatId),
     aviso: "Ajuste gravado.",
@@ -427,7 +577,7 @@ export function parseAcao(dados: string):
   | { tipo: "pagar"; indice: number }
   | { tipo: "cancelar_pix"; indice: number }
   | { tipo: "cartao"; indice: number }
-  | { tipo: "pedir"; campo: CampoPendente }
+  | { tipo: "pedir"; campo: CampoPendente; indice?: number }
   | { tipo: "toggle"; campo: "prefixoThialinha" | "botaoMiniApp" }
   | { tipo: "cancelar" }
   | { tipo: "atualizar" }
@@ -435,8 +585,15 @@ export function parseAcao(dados: string):
   | { tipo: "anuncio_previa" }
   | { tipo: "anuncio_enviar" }
   | { tipo: "anuncio_confirmar" }
+  | { tipo: "criterio"; criterio: "manual" | "conta_aberta" }
+  | { tipo: "aprovar_indicacao"; indice: number }
+  | { tipo: "rejeitar_indicacao"; indice: number }
+  | { tipo: "recompensas"; indice: number }
   | undefined {
   if (dados === "a:v") return { tipo: "aba", aba: "visao" };
+  if (dados === "a:h") return { tipo: "aba", aba: "clube" };
+  if (dados === "a:ic:m") return { tipo: "criterio", criterio: "manual" };
+  if (dados === "a:ic:c") return { tipo: "criterio", criterio: "conta_aberta" };
   if (dados === "a:n") return { tipo: "aba", aba: "anuncio" };
   if (dados === "a:nl") return { tipo: "anuncio_limpar" };
   if (dados === "a:np") return { tipo: "anuncio_previa" };
@@ -460,11 +617,22 @@ export function parseAcao(dados: string):
     const nome = letra === "c" ? "contas" : letra === "p" ? "pix" : "ledger";
     return { tipo: "aba", aba: nome, pagina };
   }
-  const pedir = dados.match(/^a:k:([nhifeuwsm])$/);
+  const pedir = dados.match(/^a:k:([nhifeuwsmlpqxyj])$/);
   if (pedir !== null) {
     const campo = CAMPOS[pedir[1]];
     if (campo === undefined) return undefined;
     return { tipo: "pedir", campo };
+  }
+  const clubeItem = dados.match(/^a:(ia|ir|lb|xp|rb|lm):(\d+)$/);
+  if (clubeItem !== null) {
+    const indice = Number(clubeItem[2]);
+    if (!Number.isSafeInteger(indice) || indice < 0 || indice > 10_000) return undefined;
+    if (clubeItem[1] === "ia") return { tipo: "aprovar_indicacao", indice };
+    if (clubeItem[1] === "ir") return { tipo: "rejeitar_indicacao", indice };
+    if (clubeItem[1] === "lb") return { tipo: "pedir", campo: "lbcoinsAjuste", indice };
+    if (clubeItem[1] === "xp") return { tipo: "pedir", campo: "xpAjuste", indice };
+    if (clubeItem[1] === "rb") return { tipo: "recompensas", indice };
+    return { tipo: "aba", aba: "clubemov", indice };
   }
   const item = dados.match(/^a:([bxdejy]):(\d+)$/);
   if (item === null) return undefined;
@@ -490,7 +658,9 @@ function abaValida(valor: unknown): valor is AbaAdmin {
     valor === "ficha" ||
     valor === "extrato" ||
     valor === "anuncio" ||
-    valor === "anunciook"
+    valor === "anunciook" ||
+    valor === "clube" ||
+    valor === "clubemov"
   );
 }
 
@@ -507,7 +677,7 @@ function tokenConfere(recebido: string, esperado: string): boolean {
 
 async function lerPendente(kv: HostKvApi, chatId: string): Promise<CampoPendente | undefined> {
   const valor = await kv.get(CHAVE_PENDENTE(chatId));
-  if (valor === "busca") return "busca";
+  if (valor === "busca" || valor === "lbcoinsAjuste" || valor === "xpAjuste") return valor;
   if (typeof valor !== "string") return undefined;
   return (Object.values(CAMPOS) as string[]).includes(valor) ? (valor as Exclude<CampoPendente, "busca">) : undefined;
 }
@@ -520,6 +690,11 @@ function pedidoDoTexto(campo: Exclude<CampoPendente, "busca">, texto: string, ch
     if (n === undefined) return undefined;
     return { [campo]: n };
   }
+  if (campo === "lbcoinsIndicacao" || campo === "xpPrata" || campo === "xpOuro" || campo === "xpIndicacao") {
+    if (!/^\d{1,7}$/.test(limpo)) return undefined;
+    return { [campo]: Number(limpo) };
+  }
+  if (campo === "lbcoinsAjuste" || campo === "xpAjuste") return undefined;
   if (campo === "nomeExibido" && limpo.length < 2) return undefined;
   if (campo === "cidadeRecebimento" && limpo.length < 2) return undefined;
   if (campo === "webappUrl" && limpo.length > 0 && !/^https:\/\//i.test(limpo)) return undefined;
@@ -549,6 +724,7 @@ function nav(aba: AbaAdmin): BotaoAdmin[][] {
   return [
     [marca("visao", "Início", "a:v"), marca("contas", "Contas", "a:c"), marca("pix", "PIX", "a:p")],
     [marca("ledger", "Lançamentos", "a:l"), marca("config", "Ajustes", "a:g"), marca("anuncio", "Anúncio", "a:n")],
+    [marca("clube", "Clube", "a:h")],
   ];
 }
 
@@ -669,11 +845,16 @@ function telaContasFiltradas(
   };
 }
 
-function telaFicha(painel: Awaited<ReturnType<typeof painelCarteira>>, indice: number): TelaAdmin {
+async function telaFicha(
+  kv: HostKvApi,
+  painel: Awaited<ReturnType<typeof painelCarteira>>,
+  indice: number,
+): Promise<TelaAdmin> {
   const conta = painel.contas[indice];
   if (conta === undefined) {
     return { texto: "Conta não localizada.", teclado: nav("contas") };
   }
+  const clube = await blocoFichaClube(kv, conta.chatId);
   const texto = [
     "Ficha cadastral",
     "",
@@ -684,7 +865,9 @@ function telaFicha(painel: Awaited<ReturnType<typeof painelCarteira>>, indice: n
     `Chave interna: ${conta.chaveInterna}`,
     `Cartão virtual: **** ${conta.cartaoFinal}  ·  ${conta.cartaoBloqueado ? "bloqueado" : "liberado"}`,
     `Abertura: ${quando(conta.aceitouEm)}`,
+    ...clube,
   ].join("\n");
+  const resumo = await consultarClube(kv, conta.chatId);
   return {
     texto,
     teclado: [
@@ -701,6 +884,17 @@ function telaFicha(painel: Awaited<ReturnType<typeof painelCarteira>>, indice: n
           callback_data: `a:j:${indice}`,
         },
         { text: "Extrato", callback_data: `a:e:${indice}` },
+      ],
+      [
+        { text: "LBcoins ±", callback_data: `a:lb:${indice}` },
+        { text: "XP ±", callback_data: `a:xp:${indice}` },
+      ],
+      [
+        { text: "Movimento Club", callback_data: `a:lm:${indice}` },
+        {
+          text: resumo?.recompensasBloqueadas === true ? "Liberar recompensas" : "Bloquear recompensas",
+          callback_data: `a:rb:${indice}`,
+        },
       ],
       [{ text: "Voltar às contas", callback_data: "a:c" }],
     ],
@@ -1024,7 +1218,16 @@ async function lerTaxasGateway(kv: HostKvApi): Promise<(TaxasPsp & { em?: string
 
 function valorCampo(campo: Exclude<CampoPendente, "busca">, atual: ReturnType<typeof configAtual>): string {
   if (campo === "taxaCentavos" || campo === "limiteCentavos") return `R$ ${reaisDe(atual[campo])}`;
+  if (campo === "lbcoinsAjuste" || campo === "xpAjuste") return "";
   return String(atual[campo] ?? "");
+}
+
+function parseAjusteQuantidade(texto: string): { quantidade: number; motivo: string } | undefined {
+  const achado = texto.trim().match(/^([+\-]?\d{1,7})\s+(.{5,200})$/);
+  if (achado === null || achado[1] === undefined || achado[2] === undefined) return undefined;
+  const quantidade = Number(achado[1]);
+  if (!Number.isSafeInteger(quantidade) || quantidade === 0) return undefined;
+  return { quantidade, motivo: achado[2].trim() };
 }
 
 function linhasTaxasGateway(gateway: (TaxasPsp & { em?: string }) | undefined, quando: string): string[] {

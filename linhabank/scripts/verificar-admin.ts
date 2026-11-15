@@ -72,7 +72,12 @@ function semIa(texto: string): void {
   assert(parseAcao("a:j:0")?.tipo === "cartao", "botão cartão");
   assert(parseAcao("a:y:1")?.tipo === "cancelar_pix", "botão cancelar PIX");
   assert((parseAcao("a:x:2") as { indice?: number }).indice === 2, "índice liquidar PIX");
-  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:n", "a:nl", "a:np", "a:ns", "a:ny", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m"];
+  assert(parseAcao("a:h")?.tipo === "aba", "botão Clube");
+  assert(parseAcao("a:ic:m")?.tipo === "criterio", "botão critério análise");
+  assert(parseAcao("a:ia:0")?.tipo === "aprovar_indicacao", "botão aprovar indicação");
+  assert(parseAcao("a:ir:0")?.tipo === "rejeitar_indicacao", "botão recusar indicação");
+  assert((parseAcao("a:k:l") as { campo?: string }).campo === "lbcoinsIndicacao", "botão LBcoins indicação");
+  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:n", "a:nl", "a:np", "a:ns", "a:ny", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m", "a:h", "a:ic:m", "a:ic:c", "a:k:l"];
   for (const dados of todos) {
     assert(parseAcao(dados) !== undefined, `callback ${dados}`);
     assert(dados.length <= 64, `callback longo ${dados}`);
@@ -101,7 +106,7 @@ function semIa(texto: string): void {
   assert(visao.texto.includes("homologação"), "painel sem ambiente");
   semIa(visao.texto);
   const dados = botoes(visao);
-  assert(dados.includes("a:g") && dados.includes("a:ms") && dados.includes("a:n"), "visão sem tarifas/ambiente/anúncio");
+  assert(dados.includes("a:g") && dados.includes("a:ms") && dados.includes("a:n") && dados.includes("a:h"), "visão sem tarifas/ambiente/anúncio/clube");
   assert(dados.every((item) => item.startsWith("a:") && item.length <= 64), "callback fora do padrão");
 }
 

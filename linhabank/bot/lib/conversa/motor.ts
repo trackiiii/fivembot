@@ -4,6 +4,8 @@ import { listarCobrancas } from "../store-kv.js";
 import { sqlDisponivel } from "../db.js";
 import { listarCobrancasSql } from "../store-sql.js";
 import { operarConta, reaisDe } from "../banco.js";
+import { consultarClube, rotuloCategoria } from "../fidelidade/index.js";
+import { configAtual } from "../config.js";
 import { FALAS_DEPOSITO_GERADO, falasDa } from "./biblioteca/index.js";
 import { classificarTexto, extrairValorDeposito } from "./classificar.js";
 import { escolherFala, preencher, primeiroNome, registrarUso } from "./escolher.js";
@@ -11,7 +13,7 @@ import { gravarEstadoFala, lerEstadoFala } from "./estado.js";
 import type { Categoria, ResultadoLocal, Slots } from "./tipos.js";
 
 const LEITURA: Categoria[] = ["saldo", "extratos", "pendentes", "confirmados"];
-const PRECISA_CONTA: Categoria[] = [...LEITURA, "depositos", "transferencias"];
+const PRECISA_CONTA: Categoria[] = [...LEITURA, "depositos", "transferencias", "clube"];
 
 export async function responderLocal(
   kv: HostKvApi,
@@ -72,9 +74,15 @@ export async function responderLocal(
     const financeiro = await preencherFinanceiro(kv, chatId, idOperacao, categoria, slots);
     if (!financeiro.ok) categoria = "tecnico";
   }
+  if (falaPrecisaClube(categoria) && temConta) {
+    const clube = await consultarClube(kv, chatId);
+    if (clube === undefined) categoria = "cadastro";
+    else preencherClube(slots, clube);
+  }
 
   const fala = escolherFala(falasDa(categoria), estado, slots);
   if (fala.texto.includes("{saldo}") && slots.saldo === undefined) return { tipo: "modelo" };
+  if (fala.texto.includes("{lbcoins}") && slots.lbcoins === undefined) return { tipo: "modelo" };
   const textoFinal = preencher(fala.texto, slots);
   const novo = registrarUso({ ...estado, pendente: proximo }, categoria, fala.id);
   await gravarEstadoFala(kv, chatId, novo);
@@ -125,4 +133,23 @@ async function preencherFinanceiro(
     return { ok: true };
   }
   return { ok: true };
+}
+
+function falaPrecisaClube(categoria: Categoria): boolean {
+  return categoria === "clube";
+}
+
+function preencherClube(slots: Slots, clube: NonNullable<Awaited<ReturnType<typeof consultarClube>>>): void {
+  const ouro = configAtual().xpOuro;
+  slots.lbcoins = String(clube.saldo);
+  slots.categoria = rotuloCategoria(clube.categoria);
+  slots.xp = String(clube.xp);
+  slots.faltaOuro = String(Math.max(0, ouro - clube.xp));
+  slots.codigo = clube.codigo;
+  slots.link = clube.link;
+  slots.indicadas = String(clube.indicadas);
+  slots.aprovadas = String(clube.aprovadas);
+  slots.pendentes = String(clube.pendentes);
+  slots.ganho = String(clube.ganhoIndicacao);
+  slots.beneficios = clube.beneficios.join(" ");
 }

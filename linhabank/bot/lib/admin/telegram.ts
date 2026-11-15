@@ -47,6 +47,9 @@ export async function tratarCallbackAdmin(kv: HostKvApi, atualizacao: CallbackAd
   if (resultado.avisoCliente !== undefined) {
     await enviarTexto(resultado.avisoCliente.chatId, resultado.avisoCliente.texto);
   }
+  for (const aviso of resultado.avisosCliente ?? []) {
+    await enviarTexto(aviso.chatId, aviso.texto);
+  }
 }
 
 export async function tratarTextoAdmin(kv: HostKvApi, atualizacao: TextoAdmin): Promise<boolean> {
@@ -78,6 +81,12 @@ export async function tratarTextoAdmin(kv: HostKvApi, atualizacao: TextoAdmin): 
     await configurarPerfil();
     await configurarMenuApp();
     await configurarComandosAdmin(atualizacao.chatId);
+  }
+  if (resultado.avisoCliente !== undefined) {
+    await enviarTexto(resultado.avisoCliente.chatId, resultado.avisoCliente.texto);
+  }
+  for (const aviso of resultado.avisosCliente ?? []) {
+    await enviarTexto(aviso.chatId, aviso.texto);
   }
   return true;
 }

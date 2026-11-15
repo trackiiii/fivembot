@@ -19,6 +19,7 @@ export const CATEGORIAS = [
   "agradecimentos",
   "despedidas",
   "incompreensao",
+  "clube",
 ] as const;
 
 export type Categoria = (typeof CATEGORIAS)[number];
@@ -37,6 +38,17 @@ export type Slots = {
   comprovante?: string;
   extrato?: string;
   pendencias?: string;
+  lbcoins?: string;
+  categoria?: string;
+  xp?: string;
+  faltaOuro?: string;
+  codigo?: string;
+  link?: string;
+  indicadas?: string;
+  aprovadas?: string;
+  pendentes?: string;
+  ganho?: string;
+  beneficios?: string;
 };
 
 export type EstadoFala = {

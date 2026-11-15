@@ -47,6 +47,8 @@ assert(classificarTexto("valeu demais").categoria === "agradecimentos", "agradec
 assert(classificarTexto("tchau").categoria === "despedidas", "despedida falhou");
 assert(classificarTexto("manda 50 pro ana@email.com").categoria === "modelo", "envio complexo foi local");
 assert(classificarTexto("quero agendar um pix").categoria === "modelo", "agendar foi local");
+assert(classificarTexto("quantos lbcoins eu tenho?").categoria === "clube", "lbcoins não foi Club");
+assert(classificarTexto("qual é minha categoria?").categoria === "clube", "categoria não foi Club");
 
 {
   const kv = kvMemoria();
@@ -104,6 +106,15 @@ assert(classificarTexto("quero agendar um pix").categoria === "modelo", "agendar
   if (receber.tipo !== "texto") throw new Error("receber pix não pediu valor");
   assert(/valor|quanto|receber|dep[oó]sit|qr|pix/i.test(receber.texto), "receber pix não soou a depósito");
   assert(!/n[aã]o tenho uma resposta boa/i.test(receber.texto), "receber pix caiu em incompreensão");
+}
+
+{
+  const kv = kvMemoria();
+  await aceitarTermos(kv, "7", "Gabi Nunes");
+  const clube = await responderLocal(kv, "7", "quantos lbcoins eu tenho?", "Gabi", true, false, "clu1");
+  assert(clube.tipo === "texto" && clube.categoria === "clube", "Club com conta não usou biblioteca");
+  if (clube.tipo !== "texto") throw new Error("Club com conta não usou biblioteca");
+  assert(/\b0\b/.test(clube.texto) && /lbcoins/i.test(clube.texto), "Club sem saldo real");
 }
 
 console.log(`conversa ok (${contagem.total} falas)`);

@@ -6,7 +6,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "dev": "agent-sdk dev",
-    "test": "node ./node_modules/tsx/dist/cli.mjs scripts/verificar-agenda.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-pix.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-carteira.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-conversa.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-app.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-admin.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-asaas.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-canal.ts",
+    "test": "node ./node_modules/tsx/dist/cli.mjs scripts/verificar-agenda.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-pix.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-carteira.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-conversa.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-app.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-admin.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-asaas.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-canal.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-clube.ts",
     "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {

@@ -1,7 +1,7 @@
 import { dataHoraBrasil } from "./horario.js";
 
 export const RESPOSTA_AJUDA =
-  "Tô aqui com a sua conta. Posso ver saldo e extrato, gerar um PIX pra você receber, mandar um PIX, agendar um envio, transferir entre contas LinhaBank, pagar boleto ou bloquear o cartão virtual. Me diz o que a gente faz agora.";
+  "Tô aqui com a sua conta. Posso ver saldo e extrato, gerar um PIX pra você receber, mandar um PIX, agendar um envio, transferir entre contas LinhaBank, pagar boleto, bloquear o cartão virtual ou abrir o LINHABANK CLUB. Me diz o que a gente faz agora.";
 
 export type ItemExtrato = {
   em: string;

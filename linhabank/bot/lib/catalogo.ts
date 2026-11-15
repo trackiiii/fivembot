@@ -1,4 +1,4 @@
-export const TEMAS = ["conta", "pix", "cartao", "atendimento", "seguranca"] as const;
+export const TEMAS = ["conta", "pix", "cartao", "atendimento", "seguranca", "clube"] as const;
 
 export type Tema = (typeof TEMAS)[number];
 
@@ -55,6 +55,17 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
       "Se o cliente enviar um desses dados, oriente a não repetir o dado neste chat.",
       "Este chat não envia link de pagamento.",
       "Comprovante enviado pelo cliente, em foto ou texto, não altera o saldo.",
+    ],
+  },
+  clube: {
+    titulo: "LINHABANK CLUB",
+    fatos: [
+      "O LINHABANK CLUB é o programa de fidelidade do LinhaBank: LBcoins, indicações e categorias Bronze, Prata e Ouro.",
+      "LBcoins são pontos de fidelidade. Não são dinheiro, saldo bancário, Pix nem moeda sacável.",
+      "A categoria depende de XP, não do saldo de LBcoins. Bronze, Prata e Ouro sobem automaticamente quando o XP chega no limite vigente.",
+      "O programa LINHABANK INDIQUE E GANHE dá um código e um link de convite. Abrir o bot pelo link não credita LBcoins. A recompensa só cai quando a indicação é aprovada.",
+      "Uma pessoa não indica a si mesma. Cada conta só pode ser indicada uma vez. A gerência configura o valor e o critério de aprovação.",
+      "O cliente consulta o Club neste chat com /club. A Thialinha só informa números que a ferramenta devolver.",
     ],
   },
 };

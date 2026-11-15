@@ -6,6 +6,8 @@ import * as z from "zod/v4";
 import { comandoAgendamentos, listarAgendamentos, processarAgendamentos } from "../lib/agenda.js";
 import { tratarCallbackAdmin, tratarMidiaAdmin, tratarSemTextoAdmin, tratarTextoAdmin } from "../lib/admin/telegram.js";
 import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } from "../lib/banco.js";
+import { abrirClube, comandoClube, tratarCallbackClube } from "../lib/clube/telegram.js";
+import { aoAbrirContaFidelidade, capturarStartIndicacao, payloadStart } from "../lib/fidelidade/index.js";
 import { garantirConfig } from "../lib/config.js";
 import { chatsAdmin } from "../lib/modo.js";
 import { responderLocal } from "../lib/conversa/index.js";
@@ -161,6 +163,10 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
       await tratarCallbackAdmin(deps.kv, atualizacao);
       return;
     }
+    if (atualizacao.decisao === "clube") {
+      await tratarCallbackClube(deps.kv, atualizacao);
+      return;
+    }
     await responderCallback(atualizacao.callbackId);
     if (atualizacao.decisao === "ignorar") return;
     if (atualizacao.decisao === "recuso") {
@@ -175,13 +181,25 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
       await enviarPadrao(deps.kv, atualizacao, RESPOSTA_AJUDA);
       return;
     }
+    const clube = await aoAbrirContaFidelidade(deps.kv, atualizacao.chatId);
     await enviarPadrao(deps.kv, atualizacao, await textoContaAberta(deps.kv, atualizacao));
+    if (clube.avisoIndicador !== undefined) {
+      await enviarTexto(clube.avisoIndicador.chatId, clube.avisoIndicador.texto);
+    }
     return;
   }
 
   if (await tratarTextoAdmin(deps.kv, atualizacao)) return;
+  const startPayload = payloadStart(atualizacao.texto);
+  if (startPayload !== undefined) {
+    await capturarStartIndicacao(deps.kv, atualizacao.chatId, startPayload);
+  }
   const decisao = decidirTermos(atualizacao.texto);
   const existente = await lerConta(deps.kv, atualizacao.chatId);
+  if (comandoClube(atualizacao.texto)) {
+    await abrirClube(deps.kv, atualizacao.chatId, atualizacao.mensagemId);
+    return;
+  }
   if (comandoAgendamentos(atualizacao.texto)) {
     if (existente === undefined) {
       await enviarTexto(atualizacao.chatId, RESPOSTA_SEM_CONTA, atualizacao.mensagemId);
@@ -210,7 +228,11 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
   const abriuAgora = existente === undefined && decisao === "concordo";
   if (abriuAgora) {
     await aceitarTermos(deps.kv, atualizacao.chatId, atualizacao.nome);
+    const clube = await aoAbrirContaFidelidade(deps.kv, atualizacao.chatId);
     await enviarPadrao(deps.kv, atualizacao, await textoContaAberta(deps.kv, atualizacao));
+    if (clube.avisoIndicador !== undefined) {
+      await enviarTexto(clube.avisoIndicador.chatId, clube.avisoIndicador.texto);
+    }
     return;
   }
   const memoria = await lerMemoria(deps.kv, atualizacao.chatId);
