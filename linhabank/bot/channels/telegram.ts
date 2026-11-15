@@ -4,7 +4,10 @@ import type { ChannelStartArgs } from "@grok/agent-sdk";
 import * as z from "zod/v4";
 
 import { comandoAgendamentos, listarAgendamentos, processarAgendamentos } from "../lib/agenda.js";
+import { tratarCallbackAdmin, tratarTextoAdmin } from "../lib/admin/telegram.js";
 import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } from "../lib/banco.js";
+import { garantirConfig } from "../lib/config.js";
+import { chatsAdmin } from "../lib/modo.js";
 import { responderLocal } from "../lib/conversa/index.js";
 import { pngCopiaECola } from "../lib/qr.js";
 import {
@@ -24,6 +27,7 @@ import {
   RESPOSTA_SEM_TEXTO,
   chaveEntrega,
   chaveUpdate,
+  configurarComandosAdmin,
   configurarPerfil,
   enviarFoto,
   enviarTermos,
@@ -66,7 +70,9 @@ export default defineChannel<EstadoTelegram>({
     }),
   ],
   async onStart(args) {
+    await garantirConfig(args.host.kv);
     const perfil = await configurarPerfil();
+    for (const chatId of chatsAdmin()) await configurarComandosAdmin(chatId);
     args.logger(perfil ? "Perfil LinhaBank atualizado no Telegram." : "Perfil do Telegram não atualizado.");
     iniciarAgendamentos(args.host.kv, args.logger);
     if (process.env.TELEGRAM_POLL !== "1") return;
@@ -148,6 +154,10 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
   }
 
   if (atualizacao.tipo === "callback") {
+    if (atualizacao.decisao === "admin") {
+      await tratarCallbackAdmin(deps.kv, atualizacao);
+      return;
+    }
     await responderCallback(atualizacao.callbackId);
     if (atualizacao.decisao === "ignorar") return;
     if (atualizacao.decisao === "recuso") {
@@ -166,6 +176,7 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     return;
   }
 
+  if (await tratarTextoAdmin(deps.kv, atualizacao)) return;
   const decisao = decidirTermos(atualizacao.texto);
   const existente = await lerConta(deps.kv, atualizacao.chatId);
   if (comandoAgendamentos(atualizacao.texto)) {

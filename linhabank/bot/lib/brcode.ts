@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
+import { configAtual } from "./config.js";
+
 function emv(id: string, valor: string): string {
   return `${id}${String(valor.length).padStart(2, "0")}${valor}`;
 }
@@ -67,7 +69,7 @@ export function montarCopiaECola(pedido: {
 }
 
 export function chaveRecebimento(): string | undefined {
-  const chave = process.env.PIX_RECEBIMENTO_CHAVE?.trim() ?? "";
+  const chave = configAtual().chaveRecebimento.trim();
   if (chave.length === 0) return undefined;
   return chave;
 }

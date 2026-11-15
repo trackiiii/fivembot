@@ -1,7 +1,9 @@
+import { configAtual } from "./config.js";
+
 export type ModoCarteira = "sandbox" | "live";
 
 export function modoCarteira(): ModoCarteira {
-  return process.env.LINHABANK_MODO?.trim() === "live" ? "live" : "sandbox";
+  return configAtual().modo;
 }
 
 export function emSandbox(): boolean {
@@ -9,8 +11,8 @@ export function emSandbox(): boolean {
 }
 
 export function chatsAdmin(): string[] {
-  return (process.env.LINHABANK_ADMIN_CHATS ?? "")
-    .split(",")
+  return configAtual()
+    .chatsAdmin.split(",")
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
 }

@@ -13,7 +13,7 @@ Este projeto **não está em produção**. Enquanto o gateway Pix, a segurança 
 - Depósito PIX com QR Code e copia e cola. O saldo **não** sobe na geração. Sobe só no webhook do provedor, ou no simulador de sandbox.
 - Histórico no ledger (lançamentos não são apagados). Comprovante `LB-…` em cada movimentação.
 - Transferência, boleto, cartão virtual, PIX agendado e protocolo.
-- Painel admin em `/v1/channels/admin/painel`.
+- Painel admin no próprio Telegram: `/admin` abre um menu de botões (visão, contas, PIX, ledger, configuração). Sem HTML e sem diálogo da Thialinha. A configuração fica no KV do bot.
 - Foto de comprovante **não** credita saldo.
 - A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo. Sem teclado extra no chat.
 - Mini-app do Telegram em `/v1/channels/app/`. Saldo, depósito PIX, envio com confirmação e extrato da mesma conta. O botão nativo **LinhaBank** só aparece com `TELEGRAM_WEBAPP_URL` em HTTPS.
@@ -55,17 +55,18 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | `PIX_TAXA_CENTAVOS` | Taxa fixa do PIX para fora |
 | `PIX_TAXA_PERCENTUAL` | Percentual do PIX para fora |
 | `LINHABANK_MODO` | `sandbox` (padrão) ou `live` |
-| `ADMIN_TOKEN` | Segredo do painel admin |
+| `ADMIN_TOKEN` | Token para o primeiro `/admin` no Telegram |
+| `LINHABANK_ADMIN_CHATS` | IDs dos chats que já entram como admin |
 | `DATABASE_URL` | PostgreSQL. Sem isso, o ledger usa o KV |
 | `LINHABANK_DB_PATH` | PGlite em arquivo, para teste local com SQL |
 
-Comando úteis no Telegram: `/start` (com conta: saldo e movimentação do dia), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`.
+Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`. O admin abre `/admin` no mesmo chat, com botões.
 
 ## Webhooks
 
 - Telegram: `POST /v1/channels/telegram/webhook`
 - PIX recebido: `POST /v1/channels/pix/recebido` com `X-Linhabank-Gateway-Token`
-- Admin: `GET /v1/channels/admin/painel` com `X-Linhabank-Admin-Token`
+- Admin: no Telegram, `/admin` (com `ADMIN_TOKEN` na primeira vez, ou chat em `LINHABANK_ADMIN_CHATS`). Tudo por botões no chat.
 - Mini-app: `GET /v1/channels/app/` e `POST /v1/channels/app/api` com `Authorization: tma <initData>`
 - Simular pagamento (só sandbox): `POST /v1/channels/admin/sandbox/pagar` `{ "cobrancaId": "dep-…" }`
 
@@ -80,3 +81,5 @@ Com `DATABASE_URL`, rode `npm run migrate` e o schema em `migrations/`. Sem Post
 ## Publicação
 
 O webhook publicado fica em `$AGENT_ALIAS_URL/v1/channels/telegram/webhook`. Não use `TELEGRAM_POLL=1` junto com o webhook. Inclua o domínio da gateway em `hosting.egressDomains` de `bot/agent.ts`.
+
+O painel admin não é uma página web. No Telegram, o chat autorizado envia `/admin` e opera por botões. Na primeira vez, `/admin` + `ADMIN_TOKEN`. Os chats também podem ir em `LINHABANK_ADMIN_CHATS`.

@@ -1,5 +1,6 @@
 import { enviarPixGateway, gatewayConfigurada, type RespostaEnvio } from "./gateway.js";
 import { chaveRecebimento, montarCopiaECola } from "./brcode.js";
+import { configAtual } from "./config.js";
 import { emSandbox } from "./modo.js";
 
 export type PedidoEnvioPsp = {
@@ -30,7 +31,7 @@ function cobrancaLocal(pedido: { valorCentavos: number; txid: string }): Cobranc
       valorCentavos: pedido.valorCentavos,
       txid: pedido.txid,
       nome: "LINHABANK",
-      cidade: process.env.PIX_RECEBIMENTO_CIDADE ?? "SAO PAULO",
+      cidade: configAtual().cidadeRecebimento,
     }),
     provedor: emSandbox() ? "sandbox" : "brcode",
     chave,

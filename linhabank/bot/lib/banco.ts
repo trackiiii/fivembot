@@ -30,11 +30,11 @@ import {
   listarLedgerSql,
   upsertContaSql,
 } from "./store-sql.js";
+import { garantirConfig, configAtual } from "./config.js";
 import { taxaPixExternoCentavos } from "./taxa.js";
 
 export const TERMOS_VERSAO = "2026-11-15-2";
 export const AGENCIA = "0001";
-const MAX_CENTAVOS = 500_000;
 
 export type TipoMovimento =
   | "pix_enviado"
@@ -201,7 +201,7 @@ export function centavosDe(valor: string | undefined): number | undefined {
   const reais = Number(achado[1]);
   const fracao = (achado[2] ?? "").padEnd(2, "0");
   const total = reais * 100 + Number(fracao);
-  if (!Number.isSafeInteger(total) || total <= 0 || total > MAX_CENTAVOS) return undefined;
+  if (!Number.isSafeInteger(total) || total <= 0 || total > configAtual().limiteCentavos) return undefined;
   return total;
 }
 
@@ -460,6 +460,7 @@ export async function operarConta(
   pedido: PedidoConta,
 ): Promise<ResultadoOperacao> {
   if (chatId === undefined) return { ok: false, motivo: "sem_conta" };
+  await garantirConfig(kv);
   const chave = chaveOperacao(sessionId, pedido);
   if (pedido.acao !== "resumo" && pedido.acao !== "extrato" && pedido.acao !== "consultar_chave") {
     const repetida = comoRegistro(await kv.get(chave));
@@ -967,6 +968,7 @@ export async function confirmarCobrancaSandbox(
   kv: HostKvApi,
   cobrancaId: string,
 ): Promise<{ estado: "novo"; chatId: string; texto: string } | { estado: "repetido" | "conta_ausente" | "valor_invalido" | "valor_divergente" | "live" }> {
+  await garantirConfig(kv);
   const { emSandbox } = await import("./modo.js");
   if (!emSandbox()) return { estado: "live" };
   const cobranca = sqlDisponivel() ? await lerCobrancaSql(cobrancaId) : await lerCobranca(kv, cobrancaId);

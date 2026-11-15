@@ -6,6 +6,7 @@ import type { HostKvApi, JsonObject, JsonValue } from "@grok/agent-sdk";
 import * as z from "zod/v4";
 
 import { TEXTO_TERMOS, type ResumoConta } from "./banco.js";
+import { configAtual } from "./config.js";
 
 carregarEnvLocal();
 
@@ -76,8 +77,18 @@ export type Atualizacao =
       nome: string;
       updateId: number;
       callbackId: string;
-      decisao: "concordo" | "recuso" | "ignorar";
+      dados: string;
+      decisao: "concordo" | "recuso" | "admin" | "ignorar";
     };
+
+export type TecladoInline = { text: string; callback_data: string }[][];
+
+export type OpcoesEnvio = {
+  replyTo?: number;
+  prefixo?: boolean;
+  teclado?: TecladoInline;
+  editar?: number;
+};
 
 const mensagemSchema = z.object({
   message_id: z.number().int(),
@@ -181,7 +192,14 @@ export function interpretarAtualizacao(corpo: unknown): Atualizacao {
     if (chat !== undefined && chat.type !== "private") return { tipo: "ignorar" };
     if (chat === undefined) return { tipo: "ignorar" };
     const data = callback.data ?? "";
-    const decisao = data === "termos:concordo" ? "concordo" : data === "termos:recuso" ? "recuso" : "ignorar";
+    const decisao =
+      data === "termos:concordo"
+        ? "concordo"
+        : data === "termos:recuso"
+          ? "recuso"
+          : data.startsWith("a:")
+            ? "admin"
+            : "ignorar";
     return {
       tipo: "callback",
       chatId: String(chat.id),
@@ -189,6 +207,7 @@ export function interpretarAtualizacao(corpo: unknown): Atualizacao {
       nome: nomeSeguro(callback.from?.first_name),
       updateId: lido.data.update_id,
       callbackId: callback.id,
+      dados: data.slice(0, 64),
       decisao,
     };
   }
@@ -331,6 +350,7 @@ export const PREFIXO_THIALINHA = "Thialinha:";
 
 export function comVozThialinha(texto: string): string {
   const limpo = texto.replace(/^\uFEFF/, "").trim();
+  if (!configAtual().prefixoThialinha) return limpo;
   if (limpo.length === 0) return PREFIXO_THIALINHA;
   if (/^thialinha\s*:/i.test(limpo)) return limpo.replace(/^thialinha\s*:/i, PREFIXO_THIALINHA);
   return `${PREFIXO_THIALINHA} ${limpo}`;
@@ -350,20 +370,32 @@ function pedacos(texto: string): string[] {
   return saida;
 }
 
-async function chamarTelegram(metodo: string, corpo: Record<string, unknown>): Promise<boolean> {
+type RespostaTelegram = {
+  ok: boolean;
+  description?: string;
+  result?: { message_id?: number };
+};
+
+async function postTelegram(metodo: string, corpo: Record<string, unknown>): Promise<RespostaTelegram> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (token === undefined || token.length === 0) return false;
+  if (token === undefined || token.length === 0) return { ok: false };
   try {
     const resposta = await fetch(`https://api.telegram.org/bot${token}/${metodo}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(corpo),
     });
-    const corpoResposta = (await resposta.json().catch(() => null)) as { ok?: boolean } | null;
-    return resposta.ok && corpoResposta?.ok === true;
+    const corpoResposta = (await resposta.json().catch(() => null)) as RespostaTelegram | null;
+    if (corpoResposta === null) return { ok: false };
+    return corpoResposta;
   } catch {
-    return false;
+    return { ok: false };
   }
+}
+
+async function chamarTelegram(metodo: string, corpo: Record<string, unknown>): Promise<boolean> {
+  const resposta = await postTelegram(metodo, corpo);
+  return resposta.ok === true;
 }
 
 export async function enviarFoto(chatId: string, png: Uint8Array, caption: string): Promise<boolean> {
@@ -386,40 +418,80 @@ export async function enviarFoto(chatId: string, png: Uint8Array, caption: strin
   }
 }
 
+function opcoesDeEnvio(valor: number | OpcoesEnvio | undefined): OpcoesEnvio {
+  if (valor === undefined) return {};
+  if (typeof valor === "number") return { replyTo: valor };
+  return valor;
+}
+
+function textoParaEnvio(texto: string, prefixo: boolean): string {
+  return prefixo ? comVozThialinha(texto) : texto.replace(/^\uFEFF/, "").trim();
+}
+
 export async function enviarTexto(
   chatId: string,
   texto: string,
-  mensagemId?: number,
+  mensagemIdOuOpcoes?: number | OpcoesEnvio,
 ): Promise<boolean> {
-  const partes = pedacos(texto);
+  return (await enviarMensagem(chatId, texto, opcoesDeEnvio(mensagemIdOuOpcoes))).ok;
+}
+
+export async function enviarMensagem(
+  chatId: string,
+  texto: string,
+  opcoes: OpcoesEnvio = {},
+): Promise<{ ok: boolean; mensagemId?: number }> {
+  const prefixo = opcoes.prefixo !== false;
+  const partes = pedacos(textoParaEnvio(texto, prefixo));
+  if (opcoes.editar !== undefined && opcoes.editar > 0) {
+    const corpo: Record<string, unknown> = {
+      chat_id: chatId,
+      message_id: opcoes.editar,
+      text: partes[0],
+    };
+    if (opcoes.teclado !== undefined) corpo.reply_markup = { inline_keyboard: opcoes.teclado };
+    const resposta = await postTelegram("editMessageText", corpo);
+    if (resposta.ok) return { ok: true, mensagemId: opcoes.editar };
+    if ((resposta.description ?? "").includes("message is not modified")) {
+      return { ok: true, mensagemId: opcoes.editar };
+    }
+    return { ok: false };
+  }
+  let mensagemId: number | undefined;
   for (let i = 0; i < partes.length; i += 1) {
     const corpo: Record<string, unknown> = {
       chat_id: chatId,
-      text: comVozThialinha(partes[i]),
+      text: partes[i],
     };
-    if (i === 0 && mensagemId !== undefined) {
-      corpo.reply_parameters = { message_id: mensagemId };
+    if (i === 0 && opcoes.replyTo !== undefined) {
+      corpo.reply_parameters = { message_id: opcoes.replyTo };
     }
-    const ok = await chamarTelegram("sendMessage", corpo);
-    if (!ok) return false;
+    if (i === 0 && opcoes.teclado !== undefined) {
+      corpo.reply_markup = { inline_keyboard: opcoes.teclado };
+    }
+    const resposta = await postTelegram("sendMessage", corpo);
+    if (!resposta.ok) return { ok: false, mensagemId };
+    if (i === 0) mensagemId = resposta.result?.message_id;
   }
-  return true;
+  return { ok: true, mensagemId };
 }
 
 export async function mostrarDigitando(chatId: string): Promise<void> {
   await chamarTelegram("sendChatAction", { chat_id: chatId, action: "typing" });
 }
 
+const COMANDOS_CLIENTE = [
+  { command: "start", description: "Começar, ou ver saldo e o movimento de hoje" },
+  { command: "ajuda", description: "Ver como a Thialinha pode ajudar" },
+  { command: "agendamentos", description: "Ver os PIX agendados" },
+  { command: "saldo", description: "Ver o saldo da conta" },
+  { command: "extrato", description: "Ver o histórico da conta" },
+  { command: "depositar", description: "Gerar QR Code para depósito PIX" },
+];
+
 export async function configurarPerfil(): Promise<boolean> {
-  const comandos = [
-    { command: "start", description: "Começar, ou ver saldo e o movimento de hoje" },
-    { command: "ajuda", description: "Ver como a Thialinha pode ajudar" },
-    { command: "agendamentos", description: "Ver os PIX agendados" },
-    { command: "saldo", description: "Ver o saldo da conta" },
-    { command: "extrato", description: "Ver o histórico da conta" },
-    { command: "depositar", description: "Gerar QR Code para depósito PIX" },
-  ];
-  const nome = await chamarTelegram("setMyName", { name: "LinhaBank" });
+  const comandos = COMANDOS_CLIENTE;
+  const nome = await chamarTelegram("setMyName", { name: configAtual().nomeExibido.slice(0, 32) });
   if (!nome) return false;
   await chamarTelegram("setMyShortDescription", {
     short_description: "Thialinha, atendente IA do LinhaBank",
@@ -433,9 +505,20 @@ export async function configurarPerfil(): Promise<boolean> {
   return true;
 }
 
+export async function configurarComandosAdmin(chatId: string): Promise<boolean> {
+  const id = Number(chatId);
+  if (!Number.isSafeInteger(id)) return false;
+  return chamarTelegram("setMyCommands", {
+    commands: [...COMANDOS_CLIENTE, { command: "admin", description: "Painel administrativo" }],
+    scope: { type: "chat", chat_id: id },
+  });
+}
+
 export function urlDoMiniApp(): string | undefined {
-  const bruto = process.env.TELEGRAM_WEBAPP_URL?.trim();
-  if (bruto === undefined || bruto.length === 0) return undefined;
+  const cfg = configAtual();
+  if (!cfg.botaoMiniApp) return undefined;
+  const bruto = cfg.webappUrl.trim();
+  if (bruto.length === 0) return undefined;
   if (!/^https:\/\//i.test(bruto)) return undefined;
   return bruto.replace(/\/$/, "");
 }
@@ -521,6 +604,8 @@ export async function enviarTermos(chatId: string, mensagemId?: number): Promise
   return chamarTelegram("sendMessage", corpo);
 }
 
-export async function responderCallback(callbackId: string): Promise<void> {
-  await chamarTelegram("answerCallbackQuery", { callback_query_id: callbackId });
+export async function responderCallback(callbackId: string, texto?: string): Promise<void> {
+  const corpo: Record<string, unknown> = { callback_query_id: callbackId };
+  if (texto !== undefined && texto.length > 0) corpo.text = texto.slice(0, 180);
+  await chamarTelegram("answerCallbackQuery", corpo);
 }
