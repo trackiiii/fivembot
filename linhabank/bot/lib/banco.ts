@@ -4,6 +4,7 @@ import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
 import { enviarPixGateway, gatewayConfigurada } from "./gateway.js";
 import { respostaPixRecebido } from "./respostas.js";
+import { taxaPixExternoCentavos } from "./taxa.js";
 
 export const TERMOS_VERSAO = "2026-11-15-2";
 export const AGENCIA = "0001";
@@ -12,7 +13,7 @@ const MAX_EXTRATO = 20;
 
 export type Movimento = {
   id: string;
-  tipo: "pix_enviado" | "pix_recebido" | "boleto" | "transferencia_enviada" | "transferencia_recebida";
+  tipo: "pix_enviado" | "pix_recebido" | "boleto" | "transferencia_enviada" | "transferencia_recebida" | "taxa";
   valorCentavos: number;
   descricao: string;
   em: string;
@@ -39,7 +40,15 @@ export type ResumoConta = {
 };
 
 export type PedidoConta = {
-  acao: "resumo" | "extrato" | "enviar_pix" | "transferir" | "pagar_boleto" | "bloquear_cartao" | "desbloquear_cartao";
+  acao:
+    | "resumo"
+    | "extrato"
+    | "consultar_chave"
+    | "enviar_pix"
+    | "transferir"
+    | "pagar_boleto"
+    | "bloquear_cartao"
+    | "desbloquear_cartao";
   valor?: string;
   chavePix?: string;
   conta?: string;
@@ -54,6 +63,10 @@ export type ResultadoOperacao = {
   valor?: string;
   destino?: string;
   endToEndId?: string;
+  taxa?: string;
+  interno?: boolean;
+  nome?: string;
+  avisoDestino?: { chatId: string; texto: string };
   inalterado?: boolean;
   conta?: {
     agencia: string;
@@ -76,6 +89,7 @@ export const TEXTO_TERMOS = [
   "4. Neste atendimento não são solicitados senha, código de verificação, CVV nem o número completo do cartão.",
   "5. O uso da conta observa a legislação aplicável. O LinhaBank pode recusar uma operação ou encerrar a conta em caso de uso irregular.",
   "6. O PIX agendado, depois de confirmado neste atendimento, é enviado automaticamente no horário definido, até que seja cancelado.",
+  "7. PIX entre contas LinhaBank, identificado pela chave da conta, não tem taxa. PIX para outras instituições pode ter taxa, informada antes da confirmação.",
   "",
   "Para abrir a conta, toque em Concordo ou responda CONCORDO.",
 ].join("\n");
@@ -174,7 +188,8 @@ function lerMovimento(valor: JsonValue | undefined): Movimento | undefined {
     item.tipo !== "pix_recebido" &&
     item.tipo !== "boleto" &&
     item.tipo !== "transferencia_enviada" &&
-    item.tipo !== "transferencia_recebida"
+    item.tipo !== "transferencia_recebida" &&
+    item.tipo !== "taxa"
   ) {
     return undefined;
   }
@@ -350,7 +365,7 @@ export async function operarConta(
 ): Promise<ResultadoOperacao> {
   if (chatId === undefined) return { ok: false, motivo: "sem_conta" };
   const chave = chaveOperacao(sessionId, pedido);
-  if (pedido.acao !== "resumo" && pedido.acao !== "extrato") {
+  if (pedido.acao !== "resumo" && pedido.acao !== "extrato" && pedido.acao !== "consultar_chave") {
     const repetida = comoRegistro(await kv.get(chave));
     if (repetida?.ok === true || repetida?.ok === false) {
       if (repetida.motivo !== "gateway_pendente" && repetida.motivo !== "gateway_indisponivel") {
@@ -370,9 +385,16 @@ export async function operarConta(
 
   const resultado = await executar(kv, conta, pedido, chave);
   if (resultado.motivo !== "gateway_pendente" && resultado.motivo !== "gateway_indisponivel") {
-    await kv.put(chave, resultado);
+    await kv.put(chave, semAviso(resultado));
   }
   return resultado;
+}
+
+function semAviso(resultado: ResultadoOperacao): ResultadoOperacao {
+  if (resultado.avisoDestino === undefined) return resultado;
+  const copia: ResultadoOperacao = { ...resultado };
+  delete copia.avisoDestino;
+  return copia;
 }
 
 async function executar(
@@ -388,6 +410,8 @@ async function executar(
     await gravarConta(kv, conta);
     return { ok: true, saldo: reaisDe(conta.saldoCentavos), conta: perfil(conta) };
   }
+
+  if (pedido.acao === "consultar_chave") return consultarChave(kv, conta, pedido);
 
   const centavos = centavosDe(pedido.valor);
   if (centavos === undefined) return { ok: false, motivo: "valor_invalido", saldo: reaisDe(conta.saldoCentavos) };
@@ -405,8 +429,51 @@ async function executar(
   if (pedido.acao === "enviar_pix") {
     return enviarPix(kv, conta, centavos, pedido.chavePix, idOperacao, pedido.origem === "agendado");
   }
-  if (pedido.acao === "transferir") return transferir(kv, conta, centavos, pedido.conta ?? pedido.chavePix);
+  if (pedido.acao === "transferir") return transferir(kv, conta, centavos, pedido.conta ?? pedido.chavePix, idOperacao);
   return { ok: false, motivo: "sem_conta" };
+}
+
+function primeiroNome(nome: string): string {
+  const pedaco = nome.trim().split(/\s+/)[0] ?? "";
+  return pedaco.slice(0, 40);
+}
+
+export async function buscarContaLinhaBank(kv: HostKvApi, chave: string): Promise<Conta | undefined> {
+  const destino = chave.trim().toLowerCase();
+  if (/^lb\d{8}@linhabank$/.test(destino)) return contaPorChat(kv, chaveContaInterna(destino));
+  if (/^\d{8}$/.test(destino)) return contaPorChat(kv, chaveContaNumero(destino));
+  return undefined;
+}
+
+async function consultarChave(kv: HostKvApi, conta: Conta, pedido: PedidoConta): Promise<ResultadoOperacao> {
+  const informada = (pedido.chavePix ?? pedido.conta ?? "").trim();
+  const saldo = reaisDe(conta.saldoCentavos);
+  const interna = await buscarContaLinhaBank(kv, informada);
+  if (interna !== undefined) {
+    if (interna.chatId === conta.chatId) return { ok: false, motivo: "mesmo_cliente", saldo, conta: perfil(conta) };
+    return {
+      ok: true,
+      interno: true,
+      taxa: "0,00",
+      destino: interna.numero,
+      nome: primeiroNome(interna.nome),
+      saldo,
+      conta: perfil(conta),
+    };
+  }
+  const classe = classificarChavePix(informada);
+  if (classe === "interna") return { ok: false, motivo: "destino_invalido", saldo, conta: perfil(conta) };
+  if (classe !== "externa") return { ok: false, motivo: "chave_ausente", saldo, conta: perfil(conta) };
+  const centavos = centavosDe(pedido.valor);
+  const taxa = taxaPixExternoCentavos(centavos ?? 0);
+  return {
+    ok: true,
+    interno: false,
+    taxa: reaisDe(taxa),
+    destino: informada.trim().toLowerCase(),
+    saldo,
+    conta: perfil(conta),
+  };
 }
 
 async function enviarPix(
@@ -418,9 +485,13 @@ async function enviarPix(
   agendado = false,
 ): Promise<ResultadoOperacao> {
   const destino = (chaveInformada ?? "").trim().toLowerCase();
+  const contaDestino = await buscarContaLinhaBank(kv, destino);
+  if (contaDestino !== undefined) {
+    return liquidarEntreContas(kv, conta, contaDestino, centavos, idOperacao, "pix");
+  }
   const classe = classificarChavePix(destino);
   if (classe === "interna") {
-    return { ok: false, motivo: "destino_interno", saldo: reaisDe(conta.saldoCentavos), conta: perfil(conta) };
+    return { ok: false, motivo: "destino_invalido", saldo: reaisDe(conta.saldoCentavos), conta: perfil(conta) };
   }
   if (classe !== "externa") {
     return { ok: false, motivo: "chave_ausente", saldo: reaisDe(conta.saldoCentavos) };
@@ -430,12 +501,15 @@ async function enviarPix(
   }
 
   const reservaChave = `linhabank:pix-out:${idOperacao}`;
-  let reserva = comoRegistro(await kv.get(reservaChave));
+  const reserva = comoRegistro(await kv.get(reservaChave));
+  const taxaGuardada = typeof reserva?.taxaCentavos === "number" ? reserva.taxaCentavos : taxaPixExternoCentavos(centavos);
   if (reserva?.status === "enviado" && typeof reserva.endToEndId === "string") {
     const atual = (await lerConta(kv, conta.chatId)) ?? conta;
     return {
       ok: true,
+      interno: false,
       valor: reaisDe(centavos),
+      taxa: reaisDe(taxaGuardada),
       destino,
       saldo: reaisDe(atual.saldoCentavos),
       endToEndId: reserva.endToEndId,
@@ -443,13 +517,14 @@ async function enviarPix(
     };
   }
   if (reserva?.debitado !== true) {
+    const taxa = taxaPixExternoCentavos(centavos);
     const atual = (await lerConta(kv, conta.chatId)) ?? conta;
-    if (atual.saldoCentavos < centavos) {
-      return { ok: false, motivo: "saldo_insuficiente", saldo: reaisDe(atual.saldoCentavos) };
+    if (atual.saldoCentavos < centavos + taxa) {
+      return { ok: false, motivo: "saldo_insuficiente", taxa: reaisDe(taxa), saldo: reaisDe(atual.saldoCentavos) };
     }
-    atual.saldoCentavos -= centavos;
+    atual.saldoCentavos -= centavos + taxa;
     await gravarConta(kv, atual);
-    await kv.put(reservaChave, { debitado: true, chatId: atual.chatId });
+    await kv.put(reservaChave, { debitado: true, chatId: atual.chatId, taxaCentavos: taxa, valorCentavos: centavos });
     conta = atual;
   }
 
@@ -460,18 +535,27 @@ async function enviarPix(
     chaveDestino: destino,
   });
   const atual = (await lerConta(kv, conta.chatId)) ?? conta;
+  const taxaReservada = comoRegistro(await kv.get(reservaChave));
+  const taxa =
+    taxaReservada?.debitado === true && typeof taxaReservada.taxaCentavos === "number"
+      ? taxaReservada.taxaCentavos
+      : taxaGuardada;
   if (!resposta.ok) {
-    atual.saldoCentavos += centavos;
+    atual.saldoCentavos += centavos + taxa;
     await gravarConta(kv, atual);
     await kv.delete(reservaChave);
-    return { ok: false, motivo: resposta.motivo, saldo: reaisDe(atual.saldoCentavos), conta: perfil(atual) };
+    return { ok: false, motivo: resposta.motivo, taxa: reaisDe(taxa), saldo: reaisDe(atual.saldoCentavos), conta: perfil(atual) };
   }
-  lancar(atual, "pix_enviado", -centavos, `${agendado ? "PIX agendado" : "PIX"} para ${destino}`);
+  const prefixo = agendado ? "PIX agendado" : "PIX";
+  lancar(atual, "pix_enviado", -centavos, `${prefixo} para ${destino}`);
+  if (taxa > 0) lancar(atual, "taxa", -taxa, "Taxa de PIX");
   await gravarConta(kv, atual);
-  await kv.put(reservaChave, { debitado: true, status: "enviado", endToEndId: resposta.endToEndId });
+  await kv.put(reservaChave, { debitado: true, status: "enviado", endToEndId: resposta.endToEndId, taxaCentavos: taxa });
   return {
     ok: true,
+    interno: false,
     valor: reaisDe(centavos),
+    taxa: reaisDe(taxa),
     destino,
     saldo: reaisDe(atual.saldoCentavos),
     endToEndId: resposta.endToEndId,
@@ -484,26 +568,76 @@ async function transferir(
   conta: Conta,
   centavos: number,
   destinoInformado: string | undefined,
+  idOperacao: string,
 ): Promise<ResultadoOperacao> {
-  const bruto = (destinoInformado ?? "").trim().toLowerCase();
-  const destino = /^lb\d{8}@linhabank$/.test(bruto)
-    ? await contaPorChat(kv, chaveContaInterna(bruto))
-    : await contaPorChat(kv, chaveContaNumero(bruto.replace(/\D/g, "")));
+  const destino = await buscarContaLinhaBank(kv, destinoInformado ?? "");
   if (destino === undefined) return { ok: false, motivo: "destino_invalido", saldo: reaisDe(conta.saldoCentavos) };
-  if (destino.chatId === conta.chatId) return { ok: false, motivo: "mesmo_cliente", saldo: reaisDe(conta.saldoCentavos) };
-  if (conta.saldoCentavos < centavos) return { ok: false, motivo: "saldo_insuficiente", saldo: reaisDe(conta.saldoCentavos) };
-  conta.saldoCentavos -= centavos;
-  destino.saldoCentavos += centavos;
-  lancar(conta, "transferencia_enviada", -centavos, `Transferência para ${destino.numero}`);
-  lancar(destino, "transferencia_recebida", centavos, `Transferência de ${conta.numero}`);
-  await gravarConta(kv, conta);
-  await gravarConta(kv, destino);
+  return liquidarEntreContas(kv, conta, destino, centavos, idOperacao, "transferencia");
+}
+
+async function liquidarEntreContas(
+  kv: HostKvApi,
+  conta: Conta,
+  destino: Conta,
+  centavos: number,
+  idOperacao: string,
+  modo: "pix" | "transferencia",
+): Promise<ResultadoOperacao> {
+  const reservaChave = `linhabank:interno:${idOperacao}`;
+  const reserva = comoRegistro(await kv.get(reservaChave));
+  if (reserva?.status === "enviado" && typeof reserva.destino === "string") {
+    const atual = (await lerConta(kv, conta.chatId)) ?? conta;
+    return {
+      ok: true,
+      interno: true,
+      taxa: "0,00",
+      valor: reaisDe(centavos),
+      destino: reserva.destino,
+      saldo: reaisDe(atual.saldoCentavos),
+      conta: perfil(atual),
+    };
+  }
+  if (destino.chatId === conta.chatId) return { ok: false, motivo: "mesmo_cliente", taxa: "0,00", saldo: reaisDe(conta.saldoCentavos) };
+  const origem = (await lerConta(kv, conta.chatId)) ?? conta;
+  const creditada = (await lerConta(kv, destino.chatId)) ?? destino;
+  if (origem.chatId === creditada.chatId) {
+    return { ok: false, motivo: "mesmo_cliente", taxa: "0,00", saldo: reaisDe(origem.saldoCentavos) };
+  }
+  if (origem.saldoCentavos < centavos) {
+    return { ok: false, motivo: "saldo_insuficiente", taxa: "0,00", saldo: reaisDe(origem.saldoCentavos) };
+  }
+  origem.saldoCentavos -= centavos;
+  creditada.saldoCentavos += centavos;
+  if (modo === "pix") {
+    lancar(origem, "pix_enviado", -centavos, `PIX para conta ${creditada.numero}`);
+    lancar(creditada, "pix_recebido", centavos, `PIX da conta ${origem.numero}`);
+  } else {
+    lancar(origem, "transferencia_enviada", -centavos, `Transferência para ${creditada.numero}`);
+    lancar(creditada, "transferencia_recebida", centavos, `Transferência de ${origem.numero}`);
+  }
+  await gravarConta(kv, origem);
+  await gravarConta(kv, creditada);
+  await kv.put(reservaChave, { status: "enviado", destino: creditada.numero });
   return {
     ok: true,
+    interno: true,
+    taxa: "0,00",
     valor: reaisDe(centavos),
-    destino: destino.numero,
-    saldo: reaisDe(conta.saldoCentavos),
-    conta: perfil(conta),
+    destino: creditada.numero,
+    nome: primeiroNome(creditada.nome),
+    saldo: reaisDe(origem.saldoCentavos),
+    conta: perfil(origem),
+    avisoDestino: {
+      chatId: creditada.chatId,
+      texto:
+        modo === "pix"
+          ? respostaPixRecebido({
+              valor: reaisDe(centavos),
+              saldo: reaisDe(creditada.saldoCentavos),
+              origem: origem.numero,
+            })
+          : `Transferência de R$ ${reaisDe(centavos)} recebida da conta ${origem.numero}. Saldo: R$ ${reaisDe(creditada.saldoCentavos)}.`,
+    },
   };
 }
 

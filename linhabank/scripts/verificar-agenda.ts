@@ -101,7 +101,7 @@ assert(
     { valor: "10,00", chavePix: "lb12345678@linhabank", frequencia: "uma_vez", data: "20/11/2026", hora: "09:00" },
     manha,
   );
-  assert(interna.ok === false && interna.motivo === "destino_interno", "chave interna foi aceita");
+  assert(interna.ok === false && interna.motivo === "destino_invalido", "chave interna inexistente foi aceita");
   const passado = await criarAgendamento(
     kv,
     "1",

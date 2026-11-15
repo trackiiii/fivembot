@@ -3,6 +3,7 @@ import { randomBytes, randomInt } from "node:crypto";
 import type { HostKvApi, JsonObject, JsonValue } from "@grok/agent-sdk";
 
 import {
+  buscarContaLinhaBank,
   classificarChavePix,
   centavosDe,
   lerConta,
@@ -20,7 +21,6 @@ import {
   type Frequencia,
 } from "./horario.js";
 import {
-  RESPOSTA_DESTINO_INTERNO,
   RESPOSTA_SEM_CONTA,
   respostaAgendamentoCancelado,
   respostaAgendamentoCriado,
@@ -417,17 +417,29 @@ export async function criarAgendamento(
   if (centavos === undefined) {
     return falha("valor_invalido", "O valor do PIX agendado precisa ser entre R$ 0,01 e R$ 5.000,00. Qual valor você quer agendar?");
   }
-  const classe = classificarChavePix(pedido.chavePix ?? "");
-  if (classe === "interna") return falha("destino_interno", RESPOSTA_DESTINO_INTERNO);
-  if (classe !== "externa") {
-    return falha(
-      "chave_ausente",
-      "A chave PIX do destino não está no formato aceito. Pode ser e-mail, celular com +55, CPF, CNPJ ou chave aleatória. Qual é a chave?",
-    );
+  const bruta = (pedido.chavePix ?? "").trim();
+  const contaDestino = await buscarContaLinhaBank(kv, bruta);
+  let destino: string;
+  if (contaDestino !== undefined) {
+    if (contaDestino.chatId === chatId) {
+      return falha("mesmo_cliente", "Essa chave é da sua própria conta. Informe a chave de outra conta.");
+    }
+    destino = contaDestino.chaveInterna;
+  } else {
+    const classe = classificarChavePix(bruta);
+    if (classe === "interna") {
+      return falha("destino_invalido", "Não encontrei essa conta LinhaBank. Confira a chave.");
+    }
+    if (classe !== "externa") {
+      return falha(
+        "chave_ausente",
+        "A chave PIX do destino não está no formato aceito. Pode ser e-mail, celular com +55, CPF, CNPJ, chave aleatória ou chave de conta LinhaBank. Qual é a chave?",
+      );
+    }
+    destino = bruta.toLowerCase();
   }
   const quando = interpretarQuando(frequencia, pedido.data, pedido.hora, agora);
   if (!quando.ok) return falha(quando.motivo, quando.texto);
-  const destino = (pedido.chavePix ?? "").trim().toLowerCase();
   return exclusivo(kv, async () => {
     const lista = await lerLista(kv, chatId);
     if (lista.filter((item) => item.status === "ativo").length >= MAX_ATIVOS) {
@@ -518,10 +530,12 @@ function decidirDepois(agenda: Agendamento, agora: Date, resultado: ResultadoOpe
       proximaEm: agenda.frequencia === "uma_vez" ? agenda.proximaEm : proximaDepois(agenda.frequencia, ocorrencia, agora),
       aviso: respostaPixAgendadoEnviado({
         valor,
-        destino: agenda.chavePix,
+        destino: resultado.interno ? `conta LinhaBank ${resultado.destino ?? agenda.chavePix}` : agenda.chavePix,
         saldo: resultado.saldo ?? reaisDe(0),
         comprovante: resultado.endToEndId?.slice(0, 40),
         proximo,
+        taxa: resultado.taxa,
+        interno: resultado.interno,
       }),
       avisoOcorrencia: undefined,
     };
@@ -621,10 +635,12 @@ async function aplicar(
     if (resultado.ok) {
       item.aviso = respostaPixAgendadoEnviado({
         valor,
-        destino: item.chavePix,
+        destino: resultado.interno ? `conta LinhaBank ${resultado.destino ?? item.chavePix}` : item.chavePix,
         saldo: resultado.saldo ?? reaisDe(0),
         comprovante: resultado.endToEndId?.slice(0, 40),
         aposCancelamento: true,
+        taxa: resultado.taxa,
+        interno: resultado.interno,
       });
     }
   } else {
@@ -698,6 +714,11 @@ async function executarCiclo(
         chavePix: item.agenda.chavePix,
         origem: "agendado",
       });
+      const aviso = resultado.avisoDestino;
+      if (aviso !== undefined) {
+        const enviado = await enviarTexto(aviso.chatId, aviso.texto);
+        if (enviado) await registrarTroca(kv, aviso.chatId, "cliente", "PIX recebido", aviso.texto, "agenda");
+      }
     } catch {
       await exclusivo(kv, () => soltar(kv, item));
       continue;

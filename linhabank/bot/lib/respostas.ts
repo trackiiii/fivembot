@@ -26,9 +26,20 @@ export function respostaSaldo(saldo: string): string {
   return `O saldo da sua conta é R$ ${saldo}. Deseja ver o extrato?`;
 }
 
-export function respostaPixEnviado(dados: { valor: string; destino: string; saldo: string; comprovante?: string }): string {
+export function respostaPixEnviado(dados: {
+  valor: string;
+  destino: string;
+  saldo: string;
+  comprovante?: string;
+  taxa?: string;
+  interno?: boolean;
+}): string {
+  if (dados.interno) {
+    return `PIX de R$ ${dados.valor} enviado para a conta LinhaBank ${dados.destino}. Sem taxa. Saldo: R$ ${dados.saldo}.`;
+  }
   const comprovante = dados.comprovante === undefined || dados.comprovante.length === 0 ? "" : ` Comprovante ${dados.comprovante}.`;
-  return `PIX de R$ ${dados.valor} enviado para ${dados.destino}.${comprovante} Saldo: R$ ${dados.saldo}.`;
+  const taxa = dados.taxa === undefined || dados.taxa === "0,00" ? " Sem taxa." : ` Taxa: R$ ${dados.taxa}.`;
+  return `PIX de R$ ${dados.valor} enviado para ${dados.destino}.${comprovante}${taxa} Saldo: R$ ${dados.saldo}.`;
 }
 
 export function respostaTransferencia(dados: { valor: string; destino: string; saldo: string }): string {
@@ -39,8 +50,11 @@ export function respostaBoleto(dados: { valor: string; descricao: string; saldo:
   return `Pagamento de R$ ${dados.valor} registrado: ${dados.descricao}. Saldo: R$ ${dados.saldo}.`;
 }
 
-export function respostaPixRecebido(dados: { valor: string; saldo: string; comprovante?: string }): string {
+export function respostaPixRecebido(dados: { valor: string; saldo: string; comprovante?: string; origem?: string }): string {
   const comprovante = dados.comprovante === undefined || dados.comprovante.length === 0 ? "" : ` Comprovante ${dados.comprovante}.`;
+  if (dados.origem !== undefined && dados.origem.length > 0) {
+    return `PIX de R$ ${dados.valor} recebido da conta LinhaBank ${dados.origem}. Saldo: R$ ${dados.saldo}.`;
+  }
   return `PIX de R$ ${dados.valor} recebido na sua conta. Saldo: R$ ${dados.saldo}.${comprovante}`;
 }
 
@@ -79,13 +93,16 @@ export function respostaPixAgendadoEnviado(dados: {
   comprovante?: string;
   proximo?: string;
   aposCancelamento?: boolean;
+  taxa?: string;
+  interno?: boolean;
 }): string {
   const comprovante = dados.comprovante === undefined || dados.comprovante.length === 0 ? "" : ` Comprovante ${dados.comprovante}.`;
+  const taxa = dados.interno || dados.taxa === undefined || dados.taxa === "0,00" ? " Sem taxa." : ` Taxa: R$ ${dados.taxa}.`;
   if (dados.aposCancelamento) {
-    return `O PIX agendado de R$ ${dados.valor} para ${dados.destino} foi enviado porque o envio já tinha começado. Não haverá próximo envio.${comprovante} Saldo: R$ ${dados.saldo}.`;
+    return `O PIX agendado de R$ ${dados.valor} para ${dados.destino} foi enviado porque o envio já tinha começado. Não haverá próximo envio.${comprovante}${taxa} Saldo: R$ ${dados.saldo}.`;
   }
   const proximo = dados.proximo === undefined ? "" : ` O próximo envio está marcado para ${dados.proximo}.`;
-  return `PIX agendado de R$ ${dados.valor} enviado para ${dados.destino}.${comprovante} Saldo: R$ ${dados.saldo}.${proximo}`;
+  return `PIX agendado de R$ ${dados.valor} enviado para ${dados.destino}.${comprovante}${taxa} Saldo: R$ ${dados.saldo}.${proximo}`;
 }
 
 export function respostaPixAgendadoNaoEnviado(dados: {

@@ -21,8 +21,10 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
     fatos: [
       "O PIX funciona 24 horas, inclusive de madrugada e no fim de semana.",
       "PIX enviado sai da conta LinhaBank. PIX recebido entra nessa conta.",
-      "A chave interna, a agência e o número da conta não são chave PIX para outros bancos.",
-      "A Thialinha confirma o PIX enviado com o comprovante da operação.",
+      "A chave de uma conta LinhaBank é reconhecida sozinha no PIX. Esse envio não tem taxa.",
+      "A chave LinhaBank não serve para outros bancos.",
+      "PIX para fora do LinhaBank pode ter taxa. A taxa vigente é informada antes da confirmação. Sem taxa configurada, o valor da taxa é zero.",
+      "A Thialinha confirma o PIX enviado com o comprovante quando ele existe.",
       "Cada envio neste chat vai até R$ 5.000,00.",
       "Um PIX pode ser agendado para um horário, uma vez, todo dia, toda semana ou todo mês. Depois de confirmado, o envio acontece sozinho até o cliente cancelar.",
       "O cliente cancela um PIX agendado neste chat, informando o código do agendamento.",

@@ -31,7 +31,7 @@ function frequenciaTexto(valor: string | undefined): string | undefined {
 
 export default defineTool({
   description:
-    "Cria, lista ou cancela um PIX agendado desta conta. O PIX não sai no momento do agendamento: no horário, o envio acontece sozinho e continua até o cliente cancelar. Chame criar só depois de repetir valor, chave, frequência e horário e ouvir um sim. Chame cancelar só depois de o cliente confirmar o código. Não use operar_conta para agendar. Se o motivo for destino_interno, oriente a transferência. Nunca fale ao cliente a palavra gateway, nem referência, webhook ou como a ligação interna funciona. Na resposta, use o campo texto.",
+    "Cria, lista ou cancela um PIX agendado desta conta. O PIX não sai no momento do agendamento: no horário, o envio acontece sozinho e continua até o cliente cancelar. Chave de conta LinhaBank é reconhecida e esse envio não tem taxa. Chame criar só depois de repetir valor, chave, frequência e horário e ouvir um sim. Chame cancelar só depois de o cliente confirmar o código. Não use operar_conta para agendar. Nunca fale ao cliente a palavra gateway, nem referência, webhook ou como a ligação interna funciona. Na resposta, use o campo texto.",
   effect: ({ acao }) => (acao === "listar" ? "read" : "write"),
   inputSchema: z.object({
     acao: z.string().describe("criar, listar ou cancelar."),
