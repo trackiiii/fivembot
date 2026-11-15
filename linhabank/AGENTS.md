@@ -26,7 +26,7 @@ Run the CLI under Node, never Bun.
 
 ## Atendimento
 
-- A fala da Thialinha fica em `bot/instructions.md`.
+- A fala da Thialinha fica em `bot/instructions.md`. Cumprimento, saldo simples e outras intenções da biblioteca em `bot/lib/conversa/` respondem localmente, sem o modelo. PIX de envio, agendamento e o que a classificação não cobrir seguem no turno do modelo.
 - O histórico de cada chat do Telegram fica em `ctx.host.kv`, na chave `linhabank:chat:<id>`.
 - Cada chat tem a própria conta. Saldo e extrato saem do ledger. Sem `DATABASE_URL` o ledger fica no kv; com Postgres, o SQL é a fonte da verdade. A gateway só envia PIX e avisa recebimento. Agência, número e chave interna servem para transferência entre contas LinhaBank.
 - Depósito PIX gera cobrança (QR + copia e cola). Crédito só no webhook do provedor, com idempotência. Foto de comprovante não credita.

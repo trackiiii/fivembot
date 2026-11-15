@@ -5,6 +5,7 @@ import * as z from "zod/v4";
 
 import { comandoAgendamentos, listarAgendamentos, processarAgendamentos } from "../lib/agenda.js";
 import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } from "../lib/banco.js";
+import { responderLocal } from "../lib/conversa/index.js";
 import { pngCopiaECola } from "../lib/qr.js";
 import {
   RESPOSTA_AJUDA,
@@ -127,9 +128,19 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     return;
   }
   if (atualizacao.tipo === "comprovante") {
-    const ok = await enviarTexto(atualizacao.chatId, RESPOSTA_COMPROVANTE, atualizacao.mensagemId);
+    const local = await responderLocal(
+      deps.kv,
+      atualizacao.chatId,
+      "segue o comprovante do pix",
+      atualizacao.nome,
+      (await lerConta(deps.kv, atualizacao.chatId)) !== undefined,
+      false,
+      `comp:${atualizacao.updateId}`,
+    );
+    const texto = local.tipo === "modelo" ? RESPOSTA_COMPROVANTE : local.texto;
+    const ok = await enviarTexto(atualizacao.chatId, texto, atualizacao.mensagemId);
     if (ok) {
-      await registrarTroca(deps.kv, atualizacao.chatId, atualizacao.nome, "[comprovante]", RESPOSTA_COMPROVANTE, "padrao");
+      await registrarTroca(deps.kv, atualizacao.chatId, atualizacao.nome, "[comprovante]", texto, "padrao");
     }
     return;
   }
@@ -183,7 +194,27 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     await enviarPadrao(deps.kv, atualizacao, await textoContaAberta(deps.kv, atualizacao));
     return;
   }
-  await falar(deps, atualizacao, atualizacao.texto, false);
+  const memoria = await lerMemoria(deps.kv, atualizacao.chatId);
+  const local = await responderLocal(
+    deps.kv,
+    atualizacao.chatId,
+    atualizacao.texto,
+    atualizacao.nome,
+    existente !== undefined,
+    memoria.historico.length === 0,
+    `fala:${atualizacao.updateId}`,
+  );
+  if (local.tipo === "modelo") {
+    await falar(deps, atualizacao, atualizacao.texto, false);
+    return;
+  }
+  if (local.tipo === "deposito") {
+    const foto = await enviarFoto(atualizacao.chatId, await pngCopiaECola(local.copiaECola), local.texto);
+    if (!foto) await enviarTexto(atualizacao.chatId, local.texto, atualizacao.mensagemId);
+    await registrarTroca(deps.kv, atualizacao.chatId, atualizacao.nome, atualizacao.texto, local.texto, "padrao");
+    return;
+  }
+  await enviarPadrao(deps.kv, atualizacao, local.texto);
 }
 
 function comando(texto: string, nome: string): boolean {
@@ -210,18 +241,42 @@ async function atalhoCarteira(
     return true;
   }
   if (saldo) {
-    const resumo = await operarConta(deps.kv, atualizacao.chatId, `saldo:${atualizacao.updateId}`, { acao: "resumo" });
-    await enviarPadrao(deps.kv, atualizacao, respostaSaldo(resumo.saldo ?? "0,00"));
+    const local = await responderLocal(
+      deps.kv,
+      atualizacao.chatId,
+      "qual é o meu saldo",
+      atualizacao.nome,
+      true,
+      false,
+      `saldo:${atualizacao.updateId}`,
+    );
+    if (local.tipo === "texto") await enviarPadrao(deps.kv, atualizacao, local.texto);
+    else {
+      const resumo = await operarConta(deps.kv, atualizacao.chatId, `saldo:${atualizacao.updateId}`, { acao: "resumo" });
+      await enviarPadrao(deps.kv, atualizacao, respostaSaldo(resumo.saldo ?? "0,00"));
+    }
     return true;
   }
   if (extrato) {
-    const lista = await operarConta(deps.kv, atualizacao.chatId, `extrato:${atualizacao.updateId}`, { acao: "extrato" });
-    const linhas = (lista.extrato ?? []).map((item) => `${item.em}: ${item.tipo} R$ ${item.valor} ${item.descricao}`);
-    const texto =
-      linhas.length === 0
-        ? `Saldo: R$ ${lista.saldo ?? "0,00"}. Ainda não há movimentação. Quer depositar?`
-        : `Saldo: R$ ${lista.saldo ?? "0,00"}. ${linhas.join(" ")}`;
-    await enviarPadrao(deps.kv, atualizacao, texto);
+    const local = await responderLocal(
+      deps.kv,
+      atualizacao.chatId,
+      "quero o extrato",
+      atualizacao.nome,
+      true,
+      false,
+      `extrato:${atualizacao.updateId}`,
+    );
+    if (local.tipo === "texto") await enviarPadrao(deps.kv, atualizacao, local.texto);
+    else {
+      const lista = await operarConta(deps.kv, atualizacao.chatId, `extrato:${atualizacao.updateId}`, { acao: "extrato" });
+      const linhas = (lista.extrato ?? []).map((item) => `${item.em}: ${item.tipo} R$ ${item.valor} ${item.descricao}`);
+      const texto =
+        linhas.length === 0
+          ? `Saldo: R$ ${lista.saldo ?? "0,00"}. Ainda não há movimentação. Quer depositar?`
+          : `Saldo: R$ ${lista.saldo ?? "0,00"}. ${linhas.join(" ")}`;
+      await enviarPadrao(deps.kv, atualizacao, texto);
+    }
     return true;
   }
   const valor = valorDoComando(atualizacao.texto);

@@ -15,6 +15,7 @@ Este projeto **não está em produção**. Enquanto o gateway Pix, a segurança 
 - Transferência, boleto, cartão virtual, PIX agendado e protocolo.
 - Painel admin em `/v1/channels/admin/painel`.
 - Foto de comprovante **não** credita saldo.
+- A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo. Sem botão extra no chat.
 
 ## O que ainda não está pronto para dinheiro real
 

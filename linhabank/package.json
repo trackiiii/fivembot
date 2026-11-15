@@ -6,7 +6,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "dev": "agent-sdk dev",
-    "test": "node ./node_modules/tsx/dist/cli.mjs scripts/verificar-agenda.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-pix.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-carteira.ts",
+    "test": "node ./node_modules/tsx/dist/cli.mjs scripts/verificar-agenda.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-pix.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-carteira.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-conversa.ts",
     "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
