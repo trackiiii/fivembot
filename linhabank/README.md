@@ -15,7 +15,8 @@ Este projeto **não está em produção**. Enquanto o gateway Pix, a segurança 
 - Transferência, boleto, cartão virtual, PIX agendado e protocolo.
 - Painel admin em `/v1/channels/admin/painel`.
 - Foto de comprovante **não** credita saldo.
-- A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo. Sem botão extra no chat.
+- A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo. Sem teclado extra no chat.
+- Mini-app do Telegram em `/v1/channels/app/`. Saldo, depósito PIX, envio com confirmação e extrato da mesma conta. O botão nativo **LinhaBank** só aparece com `TELEGRAM_WEBAPP_URL` em HTTPS.
 
 ## O que ainda não está pronto para dinheiro real
 
@@ -44,6 +45,8 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Token do @linhabank_bot |
 | `TELEGRAM_WEBHOOK_SECRET` | Segredo do webhook do Telegram |
+| `TELEGRAM_WEBAPP_URL` | HTTPS do mini-app (`…/v1/channels/app/`). Sem isso, o botão do app não é ligado |
+| `LINHABANK_APP_DEV_CHAT` | Chat de teste do mini-app só em `127.0.0.1` |
 | `CURSOR_API_KEY` | Chave do modelo, só no ambiente |
 | `PIX_GATEWAY_URL` | HTTPS da gateway. Vazio = PIX para fora não sai |
 | `PIX_GATEWAY_TOKEN` | Token enviado à gateway |
@@ -63,6 +66,7 @@ Comando úteis no Telegram: `/start`, `/ajuda`, `/saldo`, `/extrato`, `/deposita
 - Telegram: `POST /v1/channels/telegram/webhook`
 - PIX recebido: `POST /v1/channels/pix/recebido` com `X-Linhabank-Gateway-Token`
 - Admin: `GET /v1/channels/admin/painel` com `X-Linhabank-Admin-Token`
+- Mini-app: `GET /v1/channels/app/` e `POST /v1/channels/app/api` com `Authorization: tma <initData>`
 - Simular pagamento (só sandbox): `POST /v1/channels/admin/sandbox/pagar` `{ "cobrancaId": "dep-…" }`
 
 O corpo do PIX recebido leva `id` (idempotente), `valorCentavos` e um destes: `txid` / `cobrancaId` da cobrança, ou `referencia` da conta. Valor diferente da cobrança é recusado. O LinhaBank não credita porque o cliente enviou comprovante.

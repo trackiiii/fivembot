@@ -6,7 +6,7 @@ export const linhabank: Fala[] = [
   { id: "lb-3", texto: "Aqui a conta é sua. PIX entre contas LinhaBank não tem taxa. Para fora, eu falo a taxa antes. Quer mandar ou receber?" },
   { id: "lb-4", texto: "A gente funciona 24 horas. Madrugada, domingo, feriado. PIX entra e sai da sua conta. Quer depositar?" },
   { id: "lb-5", texto: "Resumindo: você abre a conta no /start, eu cuido do atendimento, e o dinheiro só mexe quando o sistema confirma. Sem surpresa. O que você precisa?" },
-  { id: "lb-6", texto: "LinhaBank não é aplicativo cheio de tela. É este papo. Saldo, extrato, QR de depósito, transferência. Por onde você quer começar?" },
+  { id: "lb-6", texto: "Aqui no chat a gente conversa. O app do LinhaBank abre no botão ao lado da mensagem, no Telegram. Saldo e PIX de lá saem da mesma conta. Por onde você quer começar?" },
   { id: "lb-7", texto: "A chave daqui serve para outra conta LinhaBank. Para banco de fora, a gente usa PIX de verdade. Quer que eu explique um dos dois?" },
   { id: "lb-8", texto: "Pode ficar tranquilo{nome}: eu não peço senha, código nem foto de documento. A conta anda neste chat. Me conta o que você quer fazer." },
 ];
@@ -17,7 +17,7 @@ export const cadastro: Fala[] = [
   { id: "cad-3", texto: "Ainda não tem conta neste chat. É rápido: /start, lê os termos e manda CONCORDO. Quer que eu te mostre o texto?" },
   { id: "cad-4", texto: "Sem o CONCORDO eu não consigo criar a carteira. Não é frescura, é pra conta ser sua. Manda /start quando quiser." },
   { id: "cad-5", texto: "Oi! Pra abrir, é /start e CONCORDO. Depois eu te entrego agência, número e a chave daqui. Vamos nessa?" },
-  { id: "cad-6", texto: "A abertura é neste chat mesmo. Sem link, sem app extra. /start e CONCORDO. Qualquer dúvida dos termos, me pergunta." },
+  { id: "cad-6", texto: "A abertura é neste chat. Sem link. /start e CONCORDO. O app só mostra a conta depois que ela existir. Qualquer dúvida dos termos, me pergunta." },
   { id: "cad-7", texto: "Ainda não achei conta sua aqui. Se já concordou em outro lugar, neste chat a gente abre de novo com /start. Quer que eu te guie?" },
 ];
 
@@ -58,4 +58,6 @@ export const faq: Fala[] = [
   { id: "faq-6", texto: "Agendamento de PIX sai sozinho no horário de Brasília, até você cancelar o código. Quer agendar um?" },
   { id: "faq-7", texto: "Eu não peço senha, SMS nem foto de documento. Se alguém pedir isso no seu nome, não é o LinhaBank. Quer que eu te explique a abertura da conta?" },
   { id: "faq-8", texto: "Protocolo é pra registro de atendimento, não substitui comprovante de PIX. Se quiser um, me conta o assunto que eu abro com o sistema." },
+  { id: "faq-9", texto: "O app do LinhaBank fica no botão ao lado do campo de mensagem, no Telegram. Não mando link. Lá você vê saldo, gera depósito e envia PIX da mesma conta deste chat." },
+  { id: "faq-10", texto: "Pode usar o app ou falar comigo aqui. Os dois mexem na mesma carteira. O saldo só muda quando o sistema confirma, nos dois." },
 ];

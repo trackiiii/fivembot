@@ -131,6 +131,10 @@ export function classificarTexto(textoBruto: string, pendente?: "valor_deposito"
     return { categoria: "linhabank", confianca: 0.9 };
   }
 
+  if (tem(texto, ["mini app", "mini-app", "miniaplicativo", "aplicativo", "abrir o app", "o app", "app do linhabank"])) {
+    return { categoria: "faq", confianca: 0.88 };
+  }
+
   if (tem(texto, ["saldo", "quanto tenho", "quanto tem na conta", "quanto tem na minha", "meu dinheiro"])) {
     return { categoria: "saldo", confianca: 0.92 };
   }

@@ -3,7 +3,7 @@ import { defineAgent } from "@grok/agent-sdk";
 export default defineAgent({
   name: "LinhaBank",
   description:
-    "Atendimento do LinhaBank em diálogo com a Thialinha, atendente IA.",
+    "Atendimento do LinhaBank em diálogo com a Thialinha, com mini-app da conta no Telegram.",
   model: {
     id: "grok-4.7",
     params: [

@@ -417,10 +417,32 @@ export async function configurarPerfil(): Promise<boolean> {
   });
   await chamarTelegram("setMyDescription", {
     description:
-      "A Thialinha cuida da sua conta no LinhaBank. Saldo, PIX, PIX agendado, transferência e cartão virtual ficam neste chat.",
+      "A Thialinha cuida da sua conta no LinhaBank. Saldo, PIX, PIX agendado, transferência e cartão virtual ficam neste chat. O app abre no botão LinhaBank ao lado da mensagem.",
   });
   await chamarTelegram("setMyCommands", { commands: comandos });
+  await configurarMenuApp();
   return true;
+}
+
+export function urlDoMiniApp(): string | undefined {
+  const bruto = process.env.TELEGRAM_WEBAPP_URL?.trim();
+  if (bruto === undefined || bruto.length === 0) return undefined;
+  if (!/^https:\/\//i.test(bruto)) return undefined;
+  return bruto.replace(/\/$/, "");
+}
+
+export async function configurarMenuApp(): Promise<boolean> {
+  const url = urlDoMiniApp();
+  if (url === undefined) {
+    return chamarTelegram("setChatMenuButton", { menu_button: { type: "commands" } });
+  }
+  return chamarTelegram("setChatMenuButton", {
+    menu_button: {
+      type: "web_app",
+      text: "LinhaBank",
+      web_app: { url },
+    },
+  });
 }
 
 export function idDaAtualizacao(corpo: unknown): number | undefined {
