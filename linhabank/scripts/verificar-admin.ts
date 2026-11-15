@@ -53,6 +53,16 @@ function botoes(tela: { teclado: { text: string; callback_data: string }[][] }):
   return tela.teclado.flat().map((item) => item.callback_data);
 }
 
+function temVoltar(tela: { teclado: { text: string; callback_data: string }[][] }, callback: string): boolean {
+  return tela.teclado.flat().some((item) => item.text.includes("Voltar") && item.callback_data === callback);
+}
+
+function opcoesIndividuais(tela: { teclado: { text: string; callback_data: string }[][] }): boolean {
+  return tela.teclado
+    .filter((row) => !row.some((item) => item.text === "Anterior" || item.text === "Próxima"))
+    .every((row) => row.length === 1);
+}
+
 function semIa(texto: string): void {
   assert(!/Oii|Perfeitooo|Thialinha|inteligência artificial|\bIA\b|feito por|botões neste chat/i.test(texto), `painel informal: ${texto}`);
 }
@@ -117,6 +127,8 @@ function semIa(texto: string): void {
   const dados = botoes(visao);
   assert(dados.includes("a:g") && dados.includes("a:ms") && dados.includes("a:n") && dados.includes("a:h") && dados.includes("a:t:m"), "visão sem tarifas/ambiente/anúncio/clube/manutenção");
   assert(visao.texto.includes("Manutenção: desligada"), "visão sem estado da manutenção");
+  assert(opcoesIndividuais(visao), "início com opções juntas");
+  assert(!temVoltar(visao, "a:v"), "início não deve ter voltar");
   assert(dados.every((item) => item.startsWith("a:") && item.length <= 64), "callback fora do padrão");
 }
 
@@ -125,6 +137,8 @@ function semIa(texto: string): void {
   await gravarConfig(kv, { chatsAdmin: "1001" });
   const live = await aplicarAcao(kv, "1001", "a:ml");
   assert(live.tela.teclado.flat().some((b) => b.callback_data === "a:my"), "produção sem confirmar");
+  assert(temVoltar(live.tela, "a:v"), "produção sem voltar");
+  assert(opcoesIndividuais(live.tela), "produção com botões juntos");
   semIa(live.tela.texto);
   assert(modoCarteira() === "sandbox", "produção mudou sem confirmar");
   await aplicarAcao(kv, "1001", "a:my");
@@ -152,9 +166,18 @@ function semIa(texto: string): void {
   const canal = await aplicarTextoAdmin(kv, "1001", "-1001234567890");
   assert(canal !== undefined && configAtual().canalMovimento === "-1001234567890", "canal de movimento não gravou");
   assert((canal?.tela.texto ?? "").includes("Canal Telegram: -1001234567890"), "ajustes sem o canal gravado");
+  assert(temVoltar(canal!.tela, "a:v"), "ajustes sem voltar");
+  assert(opcoesIndividuais(canal!.tela), "ajustes com opções juntas");
+  await aplicarAcao(kv, "1001", "a:g");
+  await aplicarAcao(kv, "1001", "a:k:f");
+  const voltouAjuste = await aplicarAcao(kv, "1001", "a:z");
+  assert(voltouAjuste.tela.texto.includes("Ajustes"), "voltar da edição não ficou nos ajustes");
+  assert((voltouAjuste.aviso ?? "").includes("cancelada"), "voltar da edição sem cancelar o pedido");
   const prefixo = await aplicarAcao(kv, "1001", "a:t:p");
   assert(configAtual().prefixoThialinha === false, "identificação no atendimento não desligou");
   assert(prefixo.tela.texto.includes("Mais opções"), "depois do toggle não voltou às opções");
+  assert(temVoltar(prefixo.tela, "a:g"), "mais opções sem voltar aos ajustes");
+  assert(opcoesIndividuais(prefixo.tela), "mais opções com botões juntos");
   semIa(prefixo.tela.texto);
   const manutencao = await aplicarAcao(kv, "1001", "a:t:m");
   assert(configAtual().manutencao === true, "manutenção não ligou");
@@ -177,6 +200,9 @@ function semIa(texto: string): void {
   assert(lista.tela.teclado.flat().some((b) => b.callback_data === "a:b:0"), "contas sem desativar");
   assert(lista.tela.teclado.flat().some((item) => item.text === "Desativar"), "lista sem Ativar/Desativar");
   assert(lista.tela.teclado.flat().some((b) => b.callback_data === "a:d:0"), "contas sem ficha");
+  assert(temVoltar(lista.tela, "a:v"), "contas sem voltar");
+  assert(!botoes(lista.tela).includes("a:p") && !botoes(lista.tela).includes("a:g"), "contas ainda com as outras abas");
+  assert(opcoesIndividuais(lista.tela), "contas com opções juntas");
   const ficha = await aplicarAcao(kv, "1001", "a:d:0");
   assert(ficha.tela.texto.includes("Ficha cadastral"), "ficha não abriu");
   assert(ficha.tela.texto.includes(conta.numero), "ficha sem número");
@@ -185,6 +211,8 @@ function semIa(texto: string): void {
   assert(ficha.tela.texto.includes("Cartão virtual"), "ficha sem cartão");
   assert(ficha.tela.teclado.flat().some((item) => item.text === "Titular" && item.callback_data === "a:en:0"), "ficha sem editar titular");
   assert(ficha.tela.teclado.flat().some((item) => item.text === "Desativar conta"), "ficha sem desativar");
+  assert(temVoltar(ficha.tela, "a:c"), "ficha sem voltar às contas");
+  assert(opcoesIndividuais(ficha.tela), "ficha com opções juntas");
   semIa(ficha.tela.texto);
   const desativada = await aplicarAcao(kv, "1001", "a:b:0");
   assert((desativada.aviso ?? "").includes("desativada"), "desativar pela gerência falhou");
@@ -201,6 +229,10 @@ function semIa(texto: string): void {
   assert((cartao.aviso ?? "").includes("Cartão"), "bloquear cartão falhou");
   const extrato = await aplicarAcao(kv, "1001", "a:e:0");
   assert(extrato.tela.texto.includes("Extrato"), "extrato gerencial não abriu");
+  assert(temVoltar(extrato.tela, "a:d:0"), "extrato sem voltar à ficha");
+  const inicio = await aplicarAcao(kv, "1001", "a:v");
+  assert(inicio.tela.texto.includes("Gerência"), "voltar do extrato não foi ao início");
+  assert(opcoesIndividuais(inicio.tela), "início depois do voltar com opções juntas");
   await aplicarAcao(kv, "1001", "a:q");
   const busca = await aplicarTextoAdmin(kv, "1001", conta.numero);
   assert(busca?.tela.texto.includes("Ficha cadastral") === true, "localizar conta não abriu a ficha");
@@ -251,6 +283,8 @@ function semIa(texto: string): void {
   semIa(pix.tela.texto);
   assert(pix.tela.teclado.flat().some((b) => b.callback_data === "a:x:0"), "PIX sem liquidar");
   assert(pix.tela.teclado.flat().some((b) => b.callback_data === "a:y:0"), "PIX sem cancelar");
+  assert(temVoltar(pix.tela, "a:v"), "PIX sem voltar");
+  assert(opcoesIndividuais(pix.tela), "PIX com opções juntas");
   const pago = await aplicarAcao(kv, "1001", "a:x:0");
   assert(pago.aviso === "Liquidação registrada.", `sandbox pagar: ${pago.aviso}`);
   assert(pago.avisoCliente?.chatId === "77", "cliente não foi avisado");
@@ -406,6 +440,8 @@ function semIa(texto: string): void {
     const tela = await aplicarAcao(kv, "1001", "a:n");
     assert(tela.tela.texto.includes("Anúncio"), "aba anúncio não abriu");
     assert(tela.tela.texto.includes("2 conta"), "anúncio sem destinatários");
+    assert(temVoltar(tela.tela, "a:v"), "anúncio sem voltar");
+    assert(opcoesIndividuais(tela.tela), "anúncio com opções juntas");
     semIa(tela.tela.texto);
     assert(tela.tela.teclado.flat().some((b) => b.callback_data === "a:ns"), "anúncio sem enviar");
     const vazio = await aplicarAcao(kv, "1001", "a:ns");
@@ -416,6 +452,8 @@ function semIa(texto: string): void {
     assert(midia !== undefined && midia.tela.texto.includes("anexada"), "imagem do anúncio não anexou");
     const confirmar = await aplicarAcao(kv, "1001", "a:ns");
     assert(confirmar.tela.texto.includes("Confirmar envio"), "confirmação do anúncio não abriu");
+    assert(temVoltar(confirmar.tela, "a:n"), "confirmação do anúncio sem voltar");
+    assert(opcoesIndividuais(confirmar.tela), "confirmação do anúncio com botões juntos");
     semIa(confirmar.tela.texto);
     const enviado = await aplicarAcao(kv, "1001", "a:ny");
     assert((enviado.aviso ?? "").includes("2 entregue"), `envio do anúncio: ${enviado.aviso}`);

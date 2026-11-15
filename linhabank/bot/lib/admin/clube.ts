@@ -39,31 +39,23 @@ export async function telaClube(kv: HostKvApi, nav: BotaoAdmin[][]): Promise<Tel
     "",
     "LBcoins não são saldo em real.",
   ].join("\n");
-  const acoes: BotaoAdmin[][] = pendentes.slice(0, 4).map((item, i) => [
-    { text: `Aprovar ${i + 1}`, callback_data: `a:ia:${i}` },
-    { text: `Recusar ${i + 1}`, callback_data: `a:ir:${i}` },
+  const acoes: BotaoAdmin[][] = pendentes.slice(0, 4).flatMap((_, i) => [
+    [{ text: `Aprovar ${i + 1}`, callback_data: `a:ia:${i}` }],
+    [{ text: `Recusar ${i + 1}`, callback_data: `a:ir:${i}` }],
   ]);
   return {
     texto,
     teclado: [
-      ...nav,
-      [
-        { text: "LBcoins indicação", callback_data: "a:k:l" },
-        { text: "XP indicação", callback_data: "a:k:x" },
-      ],
-      [
-        { text: cfg.indicacaoCriterio === "manual" ? "• Análise" : "Análise", callback_data: "a:ic:m" },
-        { text: cfg.indicacaoCriterio === "conta_aberta" ? "• Conta aberta" : "Conta aberta", callback_data: "a:ic:c" },
-      ],
-      [
-        { text: "XP Prata", callback_data: "a:k:p" },
-        { text: "XP Ouro", callback_data: "a:k:q" },
-      ],
-      [
-        { text: "Texto Prata", callback_data: "a:k:j" },
-        { text: "Texto Ouro", callback_data: "a:k:y" },
-      ],
+      [{ text: "LBcoins indicação", callback_data: "a:k:l" }],
+      [{ text: "XP indicação", callback_data: "a:k:x" }],
+      [{ text: cfg.indicacaoCriterio === "manual" ? "• Análise" : "Análise", callback_data: "a:ic:m" }],
+      [{ text: cfg.indicacaoCriterio === "conta_aberta" ? "• Conta aberta" : "Conta aberta", callback_data: "a:ic:c" }],
+      [{ text: "XP Prata", callback_data: "a:k:p" }],
+      [{ text: "XP Ouro", callback_data: "a:k:q" }],
+      [{ text: "Texto Prata", callback_data: "a:k:j" }],
+      [{ text: "Texto Ouro", callback_data: "a:k:y" }],
       ...acoes,
+      ...nav,
     ],
   };
 }
@@ -82,7 +74,7 @@ export async function blocoFichaClube(kv: HostKvApi, chatId: string): Promise<st
   ];
 }
 
-export async function telaMovimentoClube(kv: HostKvApi, chatId: string, nome: string, nav: BotaoAdmin[][], indice: number): Promise<TelaAdmin> {
+export async function telaMovimentoClube(kv: HostKvApi, chatId: string, nome: string, nav: BotaoAdmin[][]): Promise<TelaAdmin> {
   const lista = await historicoLbcoins(kv, chatId, 12);
   const linhas =
     lista.length === 0
@@ -90,6 +82,6 @@ export async function telaMovimentoClube(kv: HostKvApi, chatId: string, nome: st
       : lista.map((item) => `${formatarQuando(item.em)}  ${item.quantidade > 0 ? "+" : ""}${item.quantidade}  ${item.tipo}\n    ${item.descricao}`);
   return {
     texto: [`LBcoins  ·  ${nome}`, "", ...linhas].join("\n"),
-    teclado: [...nav, [{ text: "Voltar à ficha", callback_data: `a:d:${indice}` }]],
+    teclado: nav,
   };
 }

@@ -147,12 +147,10 @@ export async function telaAnuncio(kv: HostKvApi, chatId: string, nav: BotaoAdmin
   return {
     texto,
     teclado: [
-      ...nav,
-      [
-        { text: "Prévia", callback_data: "a:np" },
-        { text: "Limpar", callback_data: "a:nl" },
-      ],
+      [{ text: "Prévia", callback_data: "a:np" }],
+      [{ text: "Limpar", callback_data: "a:nl" }],
       [{ text: "Enviar a todos", callback_data: "a:ns" }],
+      ...nav,
     ],
   };
 }
@@ -175,11 +173,8 @@ export function telaConfirmarAnuncio(
   return {
     texto,
     teclado: [
+      [{ text: "Confirmar envio", callback_data: "a:ny" }],
       ...nav,
-      [
-        { text: "Confirmar envio", callback_data: "a:ny" },
-        { text: "Cancelar", callback_data: "a:z" },
-      ],
     ],
   };
 }

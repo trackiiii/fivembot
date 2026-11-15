@@ -282,6 +282,11 @@ assert(categoriaDeXp(5000) === "ouro", "faixa ouro");
   const clube = await aplicarAcao(kv, "1001", "a:h");
   assert(clube.tela.texto.includes("Clube"), "painel Clube");
   assert(!/Thialinha|Oii|Perfeitooo/i.test(clube.tela.texto), "painel Club informal");
+  assert(clube.tela.teclado.flat().some((item) => item.text.includes("Voltar") && item.callback_data === "a:v"), "Clube sem voltar");
+  assert(
+    clube.tela.teclado.filter((row) => !row.some((item) => item.text === "Anterior" || item.text === "Próxima")).every((row) => row.length === 1),
+    "Clube com opções juntas",
+  );
   const aprov = await aplicarAcao(kv, "1001", "a:ia:0");
   assert(aprov.aviso === "Indicação aprovada.", `aprovar no painel: ${aprov.aviso}`);
   assert((await consultarClube(kv, "90"))?.saldo === 500, "painel não creditou");

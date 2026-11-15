@@ -273,16 +273,16 @@ export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdm
   if (ui.aba === "mais") return telaMais(config);
   if (ui.aba === "ficha") return telaFicha(kv, painel, ui.indice ?? 0);
   if (ui.aba === "extrato") return telaExtrato(kv, painel, ui.indice ?? 0);
-  if (ui.aba === "clube") return telaClube(kv, nav("clube"));
+  if (ui.aba === "clube") return telaClube(kv, voltar("a:v"));
   if (ui.aba === "clubemov") {
     const conta = painel.contas[ui.indice ?? 0];
-    if (conta === undefined) return { texto: "Conta não localizada.", teclado: nav("contas") };
-    return telaMovimentoClube(kv, conta.chatId, `${conta.numero}  ${conta.nome}`, nav("contas"), ui.indice ?? 0);
+    if (conta === undefined) return { texto: "Conta não localizada.", teclado: voltar("a:c", "Voltar às contas") };
+    return telaMovimentoClube(kv, conta.chatId, `${conta.numero}  ${conta.nome}`, voltar(`a:d:${ui.indice ?? 0}`, "Voltar à ficha"));
   }
-  if (ui.aba === "anuncio") return telaAnuncio(kv, chatId, nav("anuncio"));
+  if (ui.aba === "anuncio") return telaAnuncio(kv, chatId, voltar("a:v"));
   if (ui.aba === "anunciook") {
     const rascunho = await lerRascunho(kv, chatId);
-    return telaConfirmarAnuncio(rascunho, (await listarChatIdsClientes(kv, true)).length, nav("anuncio"));
+    return telaConfirmarAnuncio(rascunho, (await listarChatIdsClientes(kv, true)).length, voltar("a:n", "Voltar ao anúncio"));
   }
   return telaResumo(painel, config, await contarAgendamentosAtivos(kv));
 }
@@ -292,16 +292,13 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
   const acao = parseAcao(dados);
   if (acao === undefined) return { tela: await montarTela(kv, chatId), aviso: "Operação inválida." };
   if (acao.tipo === "cancelar") {
+    const pendente = await lerPendente(kv, chatId);
     await kv.delete(CHAVE_PENDENTE(chatId));
     const ui = await lerUi(kv, chatId);
-    const aba =
-      ui.aba === "liveok"
-        ? "visao"
-        : ui.aba === "ficha" || ui.aba === "extrato"
-          ? "contas"
-          : ui.aba === "anunciook"
-            ? "anuncio"
-            : ui.aba;
+    if (pendente !== undefined) {
+      return { tela: await montarTela(kv, chatId), aviso: "Operação cancelada." };
+    }
+    const aba = ui.aba === "liveok" ? "visao" : ui.aba === "anunciook" ? "anuncio" : ui.aba === "mais" ? "config" : "visao";
     await gravarUi(kv, chatId, { ...ui, aba });
     return { tela: await montarTela(kv, chatId), aviso: "Operação cancelada." };
   }
@@ -335,11 +332,13 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
   }
   if (acao.tipo === "pedir") {
     await kv.put(CHAVE_PENDENTE(chatId), acao.campo);
-    if (acao.indice !== undefined) {
-      const ui = await lerUi(kv, chatId);
-      await gravarUi(kv, chatId, { ...ui, indice: acao.indice });
-    }
-    const indice = acao.indice ?? (await lerUi(kv, chatId)).indice;
+    const ui = await lerUi(kv, chatId);
+    await gravarUi(kv, chatId, {
+      ...ui,
+      aba: abaDoCampo(acao.campo),
+      indice: acao.indice ?? ui.indice,
+    });
+    const indice = acao.indice ?? ui.indice;
     return { tela: telaPendente(acao.campo, await valorAtualCadastro(kv, acao.campo, indice)) };
   }
   if (acao.tipo === "anuncio_limpar") {
@@ -862,16 +861,12 @@ function pedidoDoTexto(campo: Exclude<CampoPendente, "busca">, texto: string, ch
   return { [campo]: limpo };
 }
 
-function nav(aba: AbaAdmin): BotaoAdmin[][] {
-  const marca = (id: AbaAdmin, rotulo: string, dados: string): BotaoAdmin => ({
-    text: aba === id ? `• ${rotulo}` : rotulo,
-    callback_data: dados,
-  });
-  return [
-    [marca("visao", "Início", "a:v"), marca("contas", "Contas", "a:c"), marca("pix", "PIX", "a:p")],
-    [marca("ledger", "Lançamentos", "a:l"), marca("config", "Ajustes", "a:g"), marca("anuncio", "Anúncio", "a:n")],
-    [marca("clube", "Clube", "a:h")],
-  ];
+function voltar(callback: string, rotulo = "Voltar"): BotaoAdmin[][] {
+  return [[{ text: rotulo, callback_data: callback }]];
+}
+
+function opcoes(...botoes: BotaoAdmin[]): BotaoAdmin[][] {
+  return botoes.map((botao) => [botao]);
 }
 
 function reaisParaCentavosCampo(texto: string, max: number): number | undefined {
@@ -910,25 +905,17 @@ function telaResumo(
     .join("\n");
   return {
     texto,
-    teclado: [
-      ...nav("visao"),
-      [
-        {
-          text: config.manutencao ? "Manutenção: on" : "Manutenção: off",
-          callback_data: "a:t:m",
-        },
-      ],
-      [
-        {
-          text: config.modo === "sandbox" ? "• Homologação" : "Homologação",
-          callback_data: "a:ms",
-        },
-        {
-          text: config.modo === "live" ? "• Produção" : "Produção",
-          callback_data: "a:ml",
-        },
-      ],
-    ],
+    teclado: opcoes(
+      { text: "Contas", callback_data: "a:c" },
+      { text: "PIX", callback_data: "a:p" },
+      { text: "Lançamentos", callback_data: "a:l" },
+      { text: "Ajustes", callback_data: "a:g" },
+      { text: "Anúncio", callback_data: "a:n" },
+      { text: "Clube", callback_data: "a:h" },
+      { text: config.manutencao ? "Manutenção: on" : "Manutenção: off", callback_data: "a:t:m" },
+      { text: config.modo === "sandbox" ? "• Homologação" : "Homologação", callback_data: "a:ms" },
+      { text: config.modo === "live" ? "• Produção" : "Produção", callback_data: "a:ml" },
+    ),
   };
 }
 
@@ -947,10 +934,8 @@ function telaProducao(): TelaAdmin {
       "Confirme somente se o convênio e os controles internos já estiverem vigentes.",
     ].join("\n"),
     teclado: [
-      [
-        { text: "Confirmar produção", callback_data: "a:my" },
-        { text: "Cancelar", callback_data: "a:z" },
-      ],
+      [{ text: "Confirmar produção", callback_data: "a:my" }],
+      ...voltar("a:v"),
     ],
   };
 }
@@ -964,19 +949,24 @@ function telaContas(painel: Awaited<ReturnType<typeof painelCarteira>>, pagina: 
           const indice = fatia.inicio + i;
           return `${indice + 1}. ${conta.numero}  ${conta.nome}\n    R$ ${conta.saldo}  ·  ${rotuloStatus(conta.status)}${conta.cartaoBloqueado ? "  ·  cartão bloqueado" : ""}`;
         });
-  const acoes: BotaoAdmin[][] = fatia.itens.map((conta, i) => {
+  const acoes: BotaoAdmin[][] = fatia.itens.flatMap((conta, i) => {
     const indice = fatia.inicio + i;
-    return [
+    return opcoes(
       { text: `Ficha ${conta.numero}`, callback_data: `a:d:${indice}` },
       {
         text: contaInativa(conta.status) ? "Ativar" : "Desativar",
         callback_data: `a:b:${indice}`,
       },
-    ];
+    );
   });
   return {
     texto: ["Contas correntes  ·  agência 0001", "", ...linhas, fatia.rodape].filter((item) => item.length > 0).join("\n"),
-    teclado: [...nav("contas"), [{ text: "Localizar conta", callback_data: "a:q" }], ...acoes, ...fatia.teclado("c")],
+    teclado: [
+      ...opcoes({ text: "Localizar conta", callback_data: "a:q" }),
+      ...acoes,
+      ...fatia.teclado("c"),
+      ...voltar("a:v"),
+    ],
   };
 }
 
@@ -994,7 +984,7 @@ function telaContasFiltradas(
   });
   return {
     texto: ["Resultado da localidade", "", ...linhas].join("\n"),
-    teclado: [...nav("contas"), ...acoes],
+    teclado: [...acoes, ...voltar("a:c", "Voltar às contas")],
   };
 }
 
@@ -1005,7 +995,7 @@ async function telaFicha(
 ): Promise<TelaAdmin> {
   const conta = painel.contas[indice];
   if (conta === undefined) {
-    return { texto: "Conta não localizada.", teclado: nav("contas") };
+    return { texto: "Conta não localizada.", teclado: voltar("a:c", "Voltar às contas") };
   }
   const clube = await blocoFichaClube(kv, conta.chatId);
   const texto = [
@@ -1025,41 +1015,30 @@ async function telaFicha(
   return {
     texto,
     teclado: [
-      ...nav("contas"),
-      [
+      ...opcoes(
         {
           text: contaInativa(conta.status) ? "Ativar conta" : "Desativar conta",
           callback_data: `a:b:${indice}`,
         },
-      ],
-      [
         { text: "Titular", callback_data: `a:en:${indice}` },
         { text: "Agência", callback_data: `a:eg:${indice}` },
-      ],
-      [
         { text: "Número", callback_data: `a:eu:${indice}` },
         { text: "Chave", callback_data: `a:ek:${indice}` },
-      ],
-      [
         { text: "Final cartão", callback_data: `a:ef:${indice}` },
         {
           text: conta.cartaoBloqueado ? "Liberar cartão" : "Bloquear cartão",
           callback_data: `a:j:${indice}`,
         },
-      ],
-      [{ text: "Extrato", callback_data: `a:e:${indice}` }],
-      [
+        { text: "Extrato", callback_data: `a:e:${indice}` },
         { text: "LBcoins ±", callback_data: `a:lb:${indice}` },
         { text: "XP ±", callback_data: `a:xp:${indice}` },
-      ],
-      [
         { text: "Movimento Club", callback_data: `a:lm:${indice}` },
         {
           text: resumo?.recompensasBloqueadas === true ? "Liberar recompensas" : "Bloquear recompensas",
           callback_data: `a:rb:${indice}`,
         },
-      ],
-      [{ text: "Voltar às contas", callback_data: "a:c" }],
+      ),
+      ...voltar("a:c", "Voltar às contas"),
     ],
   };
 }
@@ -1070,7 +1049,7 @@ async function telaExtrato(
   indice: number,
 ): Promise<TelaAdmin> {
   const conta = painel.contas[indice];
-  if (conta === undefined) return { texto: "Conta não localizada.", teclado: nav("contas") };
+  if (conta === undefined) return { texto: "Conta não localizada.", teclado: voltar("a:c", "Voltar às contas") };
   const lista = await operarConta(kv, conta.chatId, `gerencia:extrato:${conta.chatId}`, { acao: "extrato" });
   const movimentos = (lista.extrato ?? []).slice(-12).reverse();
   const linhas =
@@ -1082,7 +1061,7 @@ async function telaExtrato(
         });
   return {
     texto: [`Extrato  ·  ${conta.numero}  ${conta.nome}`, `Saldo R$ ${conta.saldo}`, "", ...linhas].join("\n"),
-    teclado: [...nav("contas"), [{ text: "Voltar à ficha", callback_data: `a:d:${indice}` }]],
+    teclado: voltar(`a:d:${indice}`, "Voltar à ficha"),
   };
 }
 
@@ -1107,9 +1086,8 @@ function telaPix(
     const item = fatia.itens[i];
     if (item.status !== "aberta") continue;
     const indice = fatia.inicio + i;
-    const row: BotaoAdmin[] = [{ text: `Cancelar ${item.valor}`, callback_data: `a:y:${indice}` }];
-    if (modo === "sandbox") row.unshift({ text: `Liquidar R$ ${item.valor}`, callback_data: `a:x:${indice}` });
-    acoes.push(row);
+    if (modo === "sandbox") acoes.push([{ text: `Liquidar R$ ${item.valor}`, callback_data: `a:x:${indice}` }]);
+    acoes.push([{ text: `Cancelar ${item.valor}`, callback_data: `a:y:${indice}` }]);
   }
   return {
     texto: [
@@ -1123,7 +1101,7 @@ function telaPix(
     ]
       .filter((item) => item.length > 0)
       .join("\n"),
-    teclado: [...nav("pix"), ...acoes, ...fatia.teclado("p")],
+    teclado: [...acoes, ...fatia.teclado("p"), ...voltar("a:v")],
   };
 }
 
@@ -1139,7 +1117,7 @@ function telaMovimento(painel: Awaited<ReturnType<typeof painelCarteira>>, pagin
         });
   return {
     texto: ["Lançamentos  ·  horário de Brasília", "", ...linhas, fatia.rodape].filter((item) => item.length > 0).join("\n"),
-    teclado: [...nav("ledger"), ...fatia.teclado("l")],
+    teclado: [...fatia.teclado("l"), ...voltar("a:v")],
   };
 }
 
@@ -1179,23 +1157,19 @@ function telaParametros(
   return {
     texto,
     teclado: [
-      ...nav("config"),
-      [
+      ...opcoes(
         { text: "Taxa R$", callback_data: "a:k:f" },
         { text: "Taxa %", callback_data: "a:k:e" },
         { text: "Puxar Asaas", callback_data: "a:r" },
-      ],
-      [
         { text: "Nome", callback_data: "a:k:n" },
         { text: "Chave PIX", callback_data: "a:k:h" },
         { text: "Cidade", callback_data: "a:k:i" },
-      ],
-      [
         { text: "Limite", callback_data: "a:k:u" },
         { text: "Canal", callback_data: "a:k:m" },
         { text: "Operadores", callback_data: "a:k:s" },
-      ],
-      [{ text: "Mais opções", callback_data: "a:o" }],
+        { text: "Mais opções", callback_data: "a:o" },
+      ),
+      ...voltar("a:v"),
     ],
   };
 }
@@ -1213,29 +1187,15 @@ function telaMais(config: ReturnType<typeof configAtual>): TelaAdmin {
   return {
     texto,
     teclado: [
-      ...nav("config"),
-      [
+      ...opcoes(
         { text: config.prefixoThialinha ? "Nome no chat: on" : "Nome no chat: off", callback_data: "a:t:p" },
         { text: config.botaoMiniApp ? "App: on" : "App: off", callback_data: "a:t:b" },
-      ],
-      [
-        {
-          text: config.manutencao ? "Manutenção: on" : "Manutenção: off",
-          callback_data: "a:t:m",
-        },
-      ],
-      [{ text: "URL do app", callback_data: "a:k:w" }],
-      [
-        {
-          text: config.modo === "sandbox" ? "• Homologação" : "Homologação",
-          callback_data: "a:ms",
-        },
-        {
-          text: config.modo === "live" ? "• Produção" : "Produção",
-          callback_data: "a:ml",
-        },
-      ],
-      [{ text: "Voltar aos ajustes", callback_data: "a:g" }],
+        { text: config.manutencao ? "Manutenção: on" : "Manutenção: off", callback_data: "a:t:m" },
+        { text: "URL do app", callback_data: "a:k:w" },
+        { text: config.modo === "sandbox" ? "• Homologação" : "Homologação", callback_data: "a:ms" },
+        { text: config.modo === "live" ? "• Produção" : "Produção", callback_data: "a:ml" },
+      ),
+      ...voltar("a:g", "Voltar aos ajustes"),
     ],
   };
 }
@@ -1247,7 +1207,7 @@ function telaPendente(campo: CampoPendente, valorHoje?: string): TelaAdmin {
         "Localizar conta",
         "Informe o número da conta, o nome do titular ou a chave interna.",
       ].join("\n"),
-      teclado: [[{ text: "Cancelar", callback_data: "a:z" }]],
+      teclado: voltar("a:z"),
     };
   }
   const valor = valorHoje ?? valorCampo(campo, configAtual());
@@ -1258,7 +1218,7 @@ function telaPendente(campo: CampoPendente, valorHoje?: string): TelaAdmin {
       DICA_CAMPO[campo],
       "Envie o novo valor.",
     ].join("\n"),
-    teclado: [[{ text: "Cancelar", callback_data: "a:z" }]],
+    teclado: voltar("a:z"),
   };
 }
 
@@ -1389,6 +1349,22 @@ function valorCampo(campo: Exclude<CampoPendente, "busca">, atual: ReturnType<ty
   if (campo === "taxaCentavos" || campo === "limiteCentavos") return `R$ ${reaisDe(atual[campo])}`;
   if (campo === "lbcoinsAjuste" || campo === "xpAjuste" || ehCampoCliente(campo)) return "";
   return String(atual[campo as keyof typeof atual] ?? "");
+}
+
+function abaDoCampo(campo: CampoPendente): AbaAdmin {
+  if (ehCampoCliente(campo) || campo === "lbcoinsAjuste" || campo === "xpAjuste") return "ficha";
+  if (campo === "busca") return "contas";
+  if (
+    campo === "lbcoinsIndicacao" ||
+    campo === "xpPrata" ||
+    campo === "xpOuro" ||
+    campo === "xpIndicacao" ||
+    campo === "beneficioPrata" ||
+    campo === "beneficioOuro"
+  ) {
+    return "clube";
+  }
+  return "config";
 }
 
 function ehCampoCliente(
