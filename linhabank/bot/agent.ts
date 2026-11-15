@@ -14,7 +14,7 @@ export default defineAgent({
   // Sem shell e sem arquivos. O modelo só alcança as ferramentas do servidor.
   tools: [],
   hosting: {
-    egressDomains: ["api.telegram.org", "api.asaas.com", "api-sandbox.asaas.com"],
+    egressDomains: ["api.telegram.org", "api.asaas.com", "api-sandbox.asaas.com", "speech.platform.bing.com"],
     secretNames: [
       "TELEGRAM_BOT_TOKEN",
       "TELEGRAM_WEBHOOK_SECRET",

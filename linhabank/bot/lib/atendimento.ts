@@ -563,9 +563,10 @@ export async function enviarMensagem(
     opcoes.teclado === undefined &&
     configAtual().vozThialinha
   ) {
+    const gravando = chamarTelegram("sendChatAction", { chat_id: chatId, action: "record_voice" });
     const audio = await sintetizarVoz(texto);
+    await gravando;
     if (audio !== undefined) {
-      await chamarTelegram("sendChatAction", { chat_id: chatId, action: "record_voice" });
       const voz = await enviarVoz(chatId, audio, textoParaEnvio(texto, prefixo), opcoes.replyTo);
       if (voz.ok) return voz;
     }

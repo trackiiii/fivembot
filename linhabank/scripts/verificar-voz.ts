@@ -12,6 +12,7 @@ function assert(condicao: boolean, mensagem: string): void {
   assert(textoParaFala("a") === undefined, "letra solta foi falada");
   assert(textoParaFala("Veja https://linhabank.test/x agora") === "Veja agora", "URL ficou na fala");
   assert(prepararFala("Oi, Thialinha. Saldo no LinhaBank.") === "Oi, Tia linha. Saldo no Linha Bank.", "nomes na fala");
+  assert(prepararFala("Seus LBcoins") === "Seus ele bê coins", "lbcoins na fala");
 }
 
 if (vozDisponivel()) {
