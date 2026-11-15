@@ -63,7 +63,7 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | `DATABASE_URL` | PostgreSQL. Sem isso, o ledger usa o KV |
 | `LINHABANK_DB_PATH` | PGlite em arquivo, para teste local com SQL |
 
-Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`. O admin abre `/admin` no mesmo chat, com botões.
+Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`. As falas da Thialinha no chat começam com o nome em negrito. O admin abre `/admin` no mesmo chat, com botões.
 
 ## Webhooks
 

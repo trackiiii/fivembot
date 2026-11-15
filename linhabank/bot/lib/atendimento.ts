@@ -347,13 +347,27 @@ export async function registrarTroca(
 }
 
 export const PREFIXO_THIALINHA = "Thialinha:";
+const PREFIXO_THIALINHA_HTML = "<b>Thialinha</b>:";
+
+function escaparHtml(texto: string): string {
+  return texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function destacarNomeThialinha(texto: string): string {
+  return texto.replace(/\bThialinha\b/gi, "<b>Thialinha</b>");
+}
 
 export function comVozThialinha(texto: string): string {
   const limpo = texto.replace(/^\uFEFF/, "").trim();
-  if (!configAtual().prefixoThialinha) return limpo;
-  if (limpo.length === 0) return PREFIXO_THIALINHA;
-  if (/^thialinha\s*:/i.test(limpo)) return limpo.replace(/^thialinha\s*:/i, PREFIXO_THIALINHA);
-  return `${PREFIXO_THIALINHA} ${limpo}`;
+  const semPrefixo = limpo.replace(/^thialinha\s*:\s*/i, "");
+  const corpo = destacarNomeThialinha(escaparHtml(semPrefixo));
+  if (!configAtual().prefixoThialinha) return corpo;
+  if (corpo.length === 0) return PREFIXO_THIALINHA_HTML;
+  return `${PREFIXO_THIALINHA_HTML} ${corpo}`;
+}
+
+function comParseHtml(texto: string, html: boolean): { text: string; parse_mode?: "HTML" } {
+  return html ? { text: texto, parse_mode: "HTML" } : { text: texto };
 }
 
 function pedacos(texto: string): string[] {
@@ -404,7 +418,9 @@ export async function enviarFoto(chatId: string, png: Uint8Array, caption: strin
   try {
     const form = new FormData();
     form.set("chat_id", chatId);
-    form.set("caption", comVozThialinha(caption).slice(0, 1024));
+    const captionHtml = comParseHtml(comVozThialinha(caption).slice(0, 1024), true);
+    form.set("caption", captionHtml.text);
+    if (captionHtml.parse_mode !== undefined) form.set("parse_mode", captionHtml.parse_mode);
     form.set("photo", new Blob([Buffer.from(png)], { type: "image/png" }), "pix.png");
     const resposta = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
       method: "POST",
@@ -442,13 +458,15 @@ export async function enviarMensagem(
   opcoes: OpcoesEnvio = {},
 ): Promise<{ ok: boolean; mensagemId?: number }> {
   const prefixo = opcoes.prefixo !== false;
-  const partes = pedacos(textoParaEnvio(texto, prefixo));
+  const partes = pedacos(textoParaEnvio(texto, prefixo)).map((parte) => comParseHtml(parte, prefixo));
   if (opcoes.editar !== undefined && opcoes.editar > 0) {
+    const primeira = partes[0] ?? { text: "" };
     const corpo: Record<string, unknown> = {
       chat_id: chatId,
       message_id: opcoes.editar,
-      text: partes[0],
+      text: primeira.text,
     };
+    if (primeira.parse_mode !== undefined) corpo.parse_mode = primeira.parse_mode;
     if (opcoes.teclado !== undefined) corpo.reply_markup = { inline_keyboard: opcoes.teclado };
     const resposta = await postTelegram("editMessageText", corpo);
     if (resposta.ok) return { ok: true, mensagemId: opcoes.editar };
@@ -459,10 +477,12 @@ export async function enviarMensagem(
   }
   let mensagemId: number | undefined;
   for (let i = 0; i < partes.length; i += 1) {
+    const parte = partes[i] ?? { text: "" };
     const corpo: Record<string, unknown> = {
       chat_id: chatId,
-      text: partes[i],
+      text: parte.text,
     };
+    if (parte.parse_mode !== undefined) corpo.parse_mode = parte.parse_mode;
     if (i === 0 && opcoes.replyTo !== undefined) {
       corpo.reply_parameters = { message_id: opcoes.replyTo };
     }
@@ -588,9 +608,10 @@ export const AVISO_FALHA =
   "Tive um problema para responder agora. Manda de novo daqui a pouco que eu te ajudo.";
 
 export async function enviarTermos(chatId: string, mensagemId?: number): Promise<boolean> {
+  const termos = comParseHtml(comVozThialinha(TEXTO_TERMOS), true);
   const corpo: Record<string, unknown> = {
     chat_id: chatId,
-    text: comVozThialinha(TEXTO_TERMOS),
+    text: termos.text,
     reply_markup: {
       inline_keyboard: [
         [
@@ -600,6 +621,7 @@ export async function enviarTermos(chatId: string, mensagemId?: number): Promise
       ],
     },
   };
+  if (termos.parse_mode !== undefined) corpo.parse_mode = termos.parse_mode;
   if (mensagemId !== undefined && mensagemId > 0) corpo.reply_parameters = { message_id: mensagemId };
   return chamarTelegram("sendMessage", corpo);
 }

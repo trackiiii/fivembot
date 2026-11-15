@@ -85,9 +85,19 @@ async function saldoDe(kv: HostKvApi, chatId: string): Promise<number> {
 }
 
 {
-  assert(comVozThialinha("Oii! Seu saldo é R$ 10,00.") === "Thialinha: Oii! Seu saldo é R$ 10,00.", "falta o nome da Thialinha");
-  assert(comVozThialinha("Thialinha: Opa") === "Thialinha: Opa", "duplicou o prefixo");
-  assert(comVozThialinha("thialinha: já estou aqui") === "Thialinha: já estou aqui", "não normalizou o prefixo");
+  assert(comVozThialinha("Oii! Seu saldo é R$ 10,00.") === "<b>Thialinha</b>: Oii! Seu saldo é R$ 10,00.", "falta o nome da Thialinha");
+  assert(comVozThialinha("Thialinha: Opa") === "<b>Thialinha</b>: Opa", "duplicou o prefixo");
+  assert(comVozThialinha("thialinha: já estou aqui") === "<b>Thialinha</b>: já estou aqui", "não normalizou o prefixo");
+  assert(
+    comVozThialinha("Eu sou a Thialinha, do LinhaBank.") === "<b>Thialinha</b>: Eu sou a <b>Thialinha</b>, do LinhaBank.",
+    "nome no texto sem negrito",
+  );
+  assert(comVozThialinha("saldo < 10 & ok") === "<b>Thialinha</b>: saldo &lt; 10 &amp; ok", "html do cliente não foi escapado");
+  const prefixoAnterior = process.env.LINHABANK_PREFIXO_THIALINHA;
+  process.env.LINHABANK_PREFIXO_THIALINHA = "0";
+  assert(comVozThialinha("Eu sou a Thialinha.") === "Eu sou a <b>Thialinha</b>.", "nome sem prefixo ficou sem negrito");
+  if (prefixoAnterior === undefined) delete process.env.LINHABANK_PREFIXO_THIALINHA;
+  else process.env.LINHABANK_PREFIXO_THIALINHA = prefixoAnterior;
 }
 
 {
