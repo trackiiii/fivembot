@@ -4,7 +4,7 @@ import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
 import { enviarPixGateway, gatewayConfigurada } from "./gateway.js";
 
-export const TERMOS_VERSAO = "2026-11-15";
+export const TERMOS_VERSAO = "2026-11-15-2";
 export const AGENCIA = "0001";
 const MAX_CENTAVOS = 500_000;
 const MAX_EXTRATO = 20;
@@ -64,21 +64,21 @@ export type ResultadoOperacao = {
 };
 
 export const TEXTO_TERMOS = [
-  "Opa, eu sou a Thialinha.",
+  "Termos de abertura de conta LinhaBank",
   "",
-  "Pra eu abrir a sua conta no LinhaBank, você precisa concordar com os termos:",
+  "A conta só é aberta com a sua concordância.",
   "",
-  "1. A conta é sua. Agência, número e chave interna servem para transferência entre contas LinhaBank.",
-  "2. O saldo e o extrato ficam no LinhaBank.",
-  "3. PIX para outros bancos sai da sua conta, e PIX recebido entra nela.",
-  "4. Boleto e transferência entre contas LinhaBank movem o saldo daqui.",
-  "5. Eu não peço senha, código, CVV nem o número completo do cartão.",
+  "1. A conta é individual e de sua titularidade.",
+  "2. Agência, número da conta e chave de transferência identificam a sua conta nas movimentações entre clientes LinhaBank.",
+  "3. Saldo, extrato, PIX, transferência, pagamento de boleto e cartão virtual são serviços desta conta.",
+  "4. Neste atendimento não são solicitados senha, código de verificação, CVV nem o número completo do cartão.",
+  "5. O uso da conta observa a legislação aplicável. O LinhaBank pode recusar uma operação ou encerrar a conta em caso de uso irregular.",
   "",
-  "Se estiver de acordo, toca em Concordo ou responde CONCORDO.",
+  "Para abrir a conta, toque em Concordo ou responda CONCORDO.",
 ].join("\n");
 
 export const TEXTO_RECUSA =
-  "Beleza. Sem o aceite eu não abro a conta. Quando quiser, manda /start de novo.";
+  "A conta não foi aberta. A abertura depende da concordância com os termos. Quando desejar, envie /start.";
 
 export function decidirTermos(texto: string): "concordo" | "recuso" | "pedir" | "seguir" {
   const limpo = texto

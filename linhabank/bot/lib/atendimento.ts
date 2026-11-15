@@ -450,7 +450,7 @@ export async function enviarTermos(chatId: string, mensagemId?: number): Promise
       inline_keyboard: [
         [
           { text: "Concordo", callback_data: "termos:concordo" },
-          { text: "Agora não", callback_data: "termos:recuso" },
+          { text: "Não concordo", callback_data: "termos:recuso" },
         ],
       ],
     },
