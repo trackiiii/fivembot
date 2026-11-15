@@ -62,8 +62,8 @@ function botoes(tela: { teclado: { text: string; callback_data: string }[][] }):
 {
   const kv = kvMemoria();
   await garantirConfig(kv);
-  assert(ehAdmin("78907034"), "78907034 deveria já ser admin");
-  assert((await tentarAbrirAdmin(kv, "78907034")) === "ok", "admin fixo pediu token");
+  assert(ehAdmin("7069054484"), "7069054484 deveria já ser admin");
+  assert((await tentarAbrirAdmin(kv, "7069054484")) === "ok", "admin fixo pediu token");
   assert((await tentarAbrirAdmin(kv, "1001")) === "pedir_token", "admin sem token passou");
   assert((await tentarAbrirAdmin(kv, "1001", "errado-admin-teste")) === "negado", "token errado passou");
   assert((await tentarAbrirAdmin(kv, "1001", "token-admin-teste")) === "ok", "bootstrap do /admin falhou");

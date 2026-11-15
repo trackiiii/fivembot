@@ -56,7 +56,7 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | `PIX_TAXA_PERCENTUAL` | Percentual do PIX para fora |
 | `LINHABANK_MODO` | `sandbox` (padrão) ou `live` |
 | `ADMIN_TOKEN` | Token para o primeiro `/admin` no Telegram |
-| `LINHABANK_ADMIN_CHATS` | IDs extras dos chats admin. O chat `78907034` já entra como admin |
+| `LINHABANK_ADMIN_CHATS` | IDs extras dos chats admin. O chat `7069054484` já entra como admin |
 | `DATABASE_URL` | PostgreSQL. Sem isso, o ledger usa o KV |
 | `LINHABANK_DB_PATH` | PGlite em arquivo, para teste local com SQL |
 

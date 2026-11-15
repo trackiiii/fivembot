@@ -1,7 +1,7 @@
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
 export const CHAVE_CONFIG = "linhabank:config";
-export const ADMINS_FIXOS = ["78907034"] as const;
+export const ADMINS_FIXOS = ["7069054484"] as const;
 
 export type ConfigBot = {
   modo: "sandbox" | "live";
