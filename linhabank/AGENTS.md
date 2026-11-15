@@ -28,7 +28,7 @@ Run the CLI under Node, never Bun.
 
 - A fala da Thialinha fica em `bot/instructions.md`. Cumprimento, saldo simples e outras intenções da biblioteca em `bot/lib/conversa/` respondem localmente, sem o modelo. PIX de envio, agendamento e o que a classificação não cobrir seguem no turno do modelo.
 - O histórico de cada chat do Telegram fica em `ctx.host.kv`, na chave `linhabank:chat:<id>`.
-- Cada chat tem a própria conta. Saldo e extrato saem do ledger. Sem `DATABASE_URL` o ledger fica no kv; com Postgres, o SQL é a fonte da verdade. A gateway só envia PIX e avisa recebimento. Agência, número e chave interna servem para transferência entre contas LinhaBank.
+- Cada chat tem a própria conta. Saldo e extrato saem do ledger. Sem `DATABASE_URL` o ledger fica no kv; com Postgres, o SQL é a fonte da verdade. Com `ASAAS_API_KEY`, o PSP é o Asaas (`POST /v3/transfers` e QR estático). Sem Asaas, o adaptador HTTP `POST /v1/pix/enviar` continua. Agência, número e chave interna servem para transferência entre contas LinhaBank.
 - Depósito PIX gera cobrança (QR + copia e cola). Crédito só no webhook do provedor, com idempotência. Foto de comprovante não credita.
 - O mini-app do Telegram vive em `bot/channels/app.ts` e `bot/lib/app/`. Autentica com initData. Não coloca teclado no chat. PIX de saída exige `confirmar: true`.
 - A gerência é um teclado inline no Telegram (`/admin`, `bot/lib/admin/`). Linguagem operacional, sem menção a IA. Configuração em `bot/lib/config.ts` (`linhabank:config`). Não use a Thialinha nem HTML para operar o painel.

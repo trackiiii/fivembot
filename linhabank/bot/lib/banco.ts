@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 
 import type { HostKvApi, JsonValue } from "@grok/agent-sdk";
 
+import { chaveQrAsaas } from "./asaas.js";
 import { hashPayload, novoTxid } from "./brcode.js";
 import { sqlDisponivel } from "./db.js";
 import { gatewayConfigurada } from "./gateway.js";
@@ -651,8 +652,10 @@ async function enviarPix(
   }
 
   const psp = pspAtual();
+  const referenciaPsp = idOperacao.length <= 100 ? idOperacao : `op${hashPayload(idOperacao).slice(0, 32)}`;
+  await kv.put(`linhabank:asaas:op:${referenciaPsp}`, idOperacao);
   const resposta = await psp.enviar({
-    id: idOperacao,
+    id: referenciaPsp,
     referencia: conta.referencia,
     valorCentavos: centavos,
     chaveDestino: destino,
@@ -670,7 +673,16 @@ async function enviarPix(
     const atual = estorno.contas.find((item) => item.chatId === conta.chatId) ?? (await lerConta(kv, conta.chatId)) ?? conta;
     return { ok: false, motivo: resposta.motivo, taxa: reaisDe(taxa), saldo: reaisDe(atual.saldoCentavos), conta: perfil(atual) };
   }
-  await kv.put(reservaChave, { debitado: true, status: "enviado", endToEndId: resposta.endToEndId, taxaCentavos: taxa });
+  const reservaEnviado: Record<string, string | number | boolean> = {
+    debitado: true,
+    status: "enviado",
+    endToEndId: resposta.endToEndId,
+    taxaCentavos: taxa,
+    valorCentavos: centavos,
+    chatId: conta.chatId,
+  };
+  if (typeof taxaReservada?.comprovante === "string") reservaEnviado.comprovante = taxaReservada.comprovante;
+  await kv.put(reservaChave, reservaEnviado);
   const atual = (await lerConta(kv, conta.chatId)) ?? conta;
   return {
     ok: true,
@@ -777,6 +789,7 @@ export type AvisoPix = {
   endToEndId?: string;
   txid?: string;
   cobrancaId?: string;
+  pixQrCodeId?: string;
 };
 
 export async function creditarPixRecebido(
@@ -857,12 +870,47 @@ export async function creditarPixRecebido(
   };
 }
 
+export async function estornarPixExterno(
+  kv: HostKvApi,
+  idOperacao: string,
+): Promise<{ estado: "novo" | "repetido" | "ausente"; chatId?: string; texto?: string }> {
+  const mapeado = await kv.get(`linhabank:asaas:op:${idOperacao}`);
+  const operacao = typeof mapeado === "string" ? mapeado : idOperacao;
+  const reservaChave = `linhabank:pix-out:${operacao}`;
+  const reserva = comoRegistro(await kv.get(reservaChave));
+  if (reserva === undefined) return { estado: "ausente" };
+  if (reserva.status === "estornado") return { estado: "repetido" };
+  if (reserva.debitado !== true) return { estado: "ausente" };
+  const chatId = typeof reserva.chatId === "string" ? reserva.chatId : undefined;
+  const valorCentavos = typeof reserva.valorCentavos === "number" ? reserva.valorCentavos : 0;
+  const taxaCentavos = typeof reserva.taxaCentavos === "number" ? reserva.taxaCentavos : 0;
+  if (chatId === undefined || valorCentavos <= 0) return { estado: "ausente" };
+  const estorno = await aplicar(kv, [chatId], `${operacao}:estorno`, [
+    { chatId, tipo: "estorno", valorCentavos: valorCentavos + taxaCentavos, descricao: "Estorno de PIX não enviado" },
+  ]);
+  await kv.put(reservaChave, { ...reserva, status: "estornado" });
+  const atual = estorno.contas.find((item) => item.chatId === chatId);
+  return {
+    estado: "novo",
+    chatId,
+    texto: atual
+      ? `PIX não liquidado. Valor devolvido. Saldo: R$ ${reaisDe(atual.saldoCentavos)}.`
+      : "PIX não liquidado. Valor devolvido.",
+  };
+}
+
 async function localizarCobranca(kv: HostKvApi, aviso: AvisoPix): Promise<Cobranca | undefined> {
   if (aviso.cobrancaId !== undefined) {
     return sqlDisponivel() ? lerCobrancaSql(aviso.cobrancaId) : lerCobranca(kv, aviso.cobrancaId);
   }
   if (aviso.txid !== undefined) {
     return sqlDisponivel() ? lerCobrancaTxidSql(aviso.txid) : lerCobrancaPorTxid(kv, aviso.txid);
+  }
+  if (aviso.pixQrCodeId !== undefined) {
+    const id = await kv.get(chaveQrAsaas(aviso.pixQrCodeId));
+    if (typeof id === "string") {
+      return sqlDisponivel() ? lerCobrancaSql(id) : lerCobranca(kv, id);
+    }
   }
   return undefined;
 }
@@ -887,12 +935,13 @@ async function criarDeposito(kv: HostKvApi, conta: Conta, centavos: number, idOp
     };
   }
   const txid = novoTxid();
-  const gerada = pspAtual().cobranca({ valorCentavos: centavos, txid });
+  const cobrancaId = `dep-${hashPayload(idOperacao).slice(0, 16)}`;
+  const gerada = await pspAtual().cobranca({ valorCentavos: centavos, txid, cobrancaId });
   if ("ok" in gerada) {
     return { ok: false, motivo: "deposito_pendente", saldo: reaisDe(conta.saldoCentavos), conta: perfil(conta) };
   }
   const cobranca: Cobranca = {
-    id: `dep-${hashPayload(idOperacao).slice(0, 16)}`,
+    id: cobrancaId,
     chatId: conta.chatId,
     valorCentavos: centavos,
     txid,
@@ -902,6 +951,7 @@ async function criarDeposito(kv: HostKvApi, conta: Conta, centavos: number, idOp
     criadaEm: new Date().toISOString(),
   };
   await salvarCobranca(kv, cobranca);
+  if (gerada.qrId !== undefined) await kv.put(chaveQrAsaas(gerada.qrId), cobranca.id);
   return {
     ok: true,
     valor: reaisDe(centavos),

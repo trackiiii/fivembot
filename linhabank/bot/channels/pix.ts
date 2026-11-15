@@ -1,7 +1,8 @@
 import { defineChannel, localDevStrict, POST, sharedSecretAuth } from "@grok/agent-sdk/channels";
 import * as z from "zod/v4";
 
-import { creditarPixRecebido } from "../lib/banco.js";
+import { avisoDePagamentoAsaas, chaveQrAsaas, lerEventoAsaas, referenciaTransferenciaAsaas } from "../lib/asaas.js";
+import { creditarPixRecebido, estornarPixExterno } from "../lib/banco.js";
 import { enviarTexto } from "../lib/atendimento.js";
 import { registrarTroca } from "../lib/atendimento.js";
 
@@ -15,12 +16,29 @@ const avisoSchema = z.object({
   cobrancaId: z.string().min(8).max(80).optional(),
 });
 
+async function avisarCredito(
+  kv: Parameters<typeof creditarPixRecebido>[0],
+  aviso: Parameters<typeof creditarPixRecebido>[1],
+): Promise<Response> {
+  const resultado = await creditarPixRecebido(kv, aviso);
+  if (resultado.estado !== "novo") {
+    return Response.json({ ok: resultado.estado === "repetido", received: true, estado: resultado.estado });
+  }
+  await enviarTexto(resultado.chatId, resultado.texto);
+  await registrarTroca(kv, resultado.chatId, "cliente", "PIX recebido", resultado.texto, "pix");
+  return Response.json({ ok: true, received: true });
+}
+
 export default defineChannel({
   auth: [
     localDevStrict(),
     sharedSecretAuth({
       header: "x-linhabank-gateway-token",
       secret: "PIX_GATEWAY_WEBHOOK_SECRET",
+    }),
+    sharedSecretAuth({
+      header: "asaas-access-token",
+      secret: "ASAAS_WEBHOOK_TOKEN",
     }),
   ],
   routes: [
@@ -39,6 +57,31 @@ export default defineChannel({
         await enviarTexto(aviso.chatId, aviso.texto);
         await registrarTroca(route.host.kv, aviso.chatId, "cliente", "PIX recebido", aviso.texto, "pix");
         return Response.json({ ok: true });
+      },
+    }),
+    POST("/asaas", {
+      description: "Eventos Asaas de PIX recebido e de transferência.",
+      bodySchema: z.unknown(),
+      handler: async (_request, route) => {
+        const evento = lerEventoAsaas(route.body);
+        if (evento === undefined) return Response.json({ received: true });
+        const aviso = avisoDePagamentoAsaas(evento);
+        if (aviso !== undefined) {
+          if (aviso.cobrancaId === undefined && aviso.pixQrCodeId !== undefined) {
+            const id = await route.host.kv.get(chaveQrAsaas(aviso.pixQrCodeId));
+            if (typeof id === "string") aviso.cobrancaId = id;
+          }
+          return avisarCredito(route.host.kv, aviso);
+        }
+        const referencia = referenciaTransferenciaAsaas(evento);
+        if (referencia !== undefined) {
+          const estorno = await estornarPixExterno(route.host.kv, referencia);
+          if (estorno.estado === "novo" && estorno.chatId !== undefined && estorno.texto !== undefined) {
+            await enviarTexto(estorno.chatId, estorno.texto);
+            await registrarTroca(route.host.kv, estorno.chatId, "cliente", "PIX estornado", estorno.texto, "pix");
+          }
+        }
+        return Response.json({ received: true });
       },
     }),
   ],

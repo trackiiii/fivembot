@@ -2,15 +2,15 @@
 
 Carteira digital em BRL, com atendimento público no Telegram pelo bot [@linhabank_bot](https://t.me/linhabank_bot). A Thialinha é a atendente IA. O dinheiro da conta não vive no modelo: saldo, ledger e PIX passam pelas ferramentas do servidor.
 
-Este projeto **não está em produção**. Enquanto o gateway Pix, a segurança e a estrutura regulatória não estiverem prontos, o modo padrão é `sandbox`. Não processe dinheiro real nesse estado.
+Este projeto **não está em produção**. O Asaas pode estar ligado para PIX, mas segurança, KYC e estrutura regulatória ainda precisam estar prontos. O modo padrão da carteira continua `sandbox` (homologação). Não trate homologação como produção.
 
 ## O que já funciona
 
 - Cadastro por `/start` e aceite dos termos, com uma carteira por chat.
 - Saldo e extrato da própria conta.
 - PIX entre contas LinhaBank, reconhecido pela chave `lb…@linhabank` ou pelo número, sem taxa.
-- PIX para fora pela gateway, quando `PIX_GATEWAY_URL` e `PIX_GATEWAY_TOKEN` existem. A taxa é `PIX_TAXA_CENTAVOS` + `PIX_TAXA_PERCENTUAL` (zero se não configurada).
-- Depósito PIX com QR Code e copia e cola. O saldo **não** sobe na geração. Sobe só no webhook do provedor, ou no simulador de sandbox.
+- PIX para fora pelo Asaas quando `ASAAS_API_KEY` existe (`POST /v3/transfers`). Sem Asaas, vale o convênio HTTP `PIX_GATEWAY_URL` + `PIX_GATEWAY_TOKEN`. A taxa é `PIX_TAXA_CENTAVOS` + `PIX_TAXA_PERCENTUAL` (zero se não configurada). PIX interno LinhaBank continua isento.
+- Depósito PIX com QR Code e copia e cola. Com Asaas, o QR é estático (`POST /v3/pix/qrCodes/static`). O saldo **não** sobe na geração. Sobe só no webhook `PAYMENT_RECEIVED`, ou no simulador de homologação.
 - Histórico no ledger (lançamentos não são apagados). Comprovante `LB-…` em cada movimentação.
 - Transferência, boleto, cartão virtual, PIX agendado e protocolo.
 - Gerência no Telegram: `/admin` abre o painel operacional (custódia, contas, ficha, extrato, tesouraria PIX, movimento e tarifas). Bloqueio de conta e cartão, liquidação em homologação, cancelamento de cobrança e parametrização. Sem página web.
@@ -20,7 +20,7 @@ Este projeto **não está em produção**. Enquanto o gateway Pix, a segurança 
 
 ## O que ainda não está pronto para dinheiro real
 
-- Não há PSP Pix de produção ligado. O adaptador HTTP fala com o contrato `POST /v1/pix/enviar` já usado pelo bot. A cobrança de depósito é um BR Code local.
+- Asaas envia e recebe PIX, mas isso não substitui KYC, licença nem conta de liquidação própria. Homologação no painel ainda permite liquidar cobrança localmente.
 - PostgreSQL só entra com `DATABASE_URL`. Sem isso, o ledger fica no KV persistente do Agent SDK.
 - Não há licença, KYC completo nem conta de liquidação. Sandbox não substitui isso.
 
@@ -48,10 +48,13 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | `TELEGRAM_WEBAPP_URL` | HTTPS do mini-app (`…/v1/channels/app/`). Sem isso, o botão do app não é ligado |
 | `LINHABANK_APP_DEV_CHAT` | Chat de teste do mini-app só em `127.0.0.1` |
 | `CURSOR_API_KEY` | Chave do modelo, só no ambiente |
-| `PIX_GATEWAY_URL` | HTTPS da gateway. Vazio = PIX para fora não sai |
-| `PIX_GATEWAY_TOKEN` | Token enviado à gateway |
-| `PIX_GATEWAY_WEBHOOK_SECRET` | Segredo do aviso de PIX recebido |
-| `PIX_RECEBIMENTO_CHAVE` | Chave Pix da cobrança de depósito |
+| `ASAAS_API_KEY` | Chave da API Asaas. Conta de produção se começar com `$aact_prod_`. Nunca commitar |
+| `ASAAS_WEBHOOK_TOKEN` | Token do webhook Asaas (header `asaas-access-token`, 32–255 caracteres) |
+| `ASAAS_AMBIENTE` | Opcional: `sandbox` ou `producao`. Sem isso, o prefixo da chave decide |
+| `PIX_GATEWAY_URL` | HTTPS de convênio HTTP genérico (testes). Vazio se o Asaas estiver no ar |
+| `PIX_GATEWAY_TOKEN` | Token do convênio HTTP genérico |
+| `PIX_GATEWAY_WEBHOOK_SECRET` | Segredo do aviso genérico de PIX recebido |
+| `PIX_RECEBIMENTO_CHAVE` | Chave Pix da conta Asaas que recebe depósito. Sem isso, o bot lista as chaves ativas |
 | `PIX_TAXA_CENTAVOS` | Taxa fixa do PIX para fora |
 | `PIX_TAXA_PERCENTUAL` | Percentual do PIX para fora |
 | `LINHABANK_MODO` | `sandbox` (padrão) ou `live` |
@@ -65,7 +68,8 @@ Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia)
 ## Webhooks
 
 - Telegram: `POST /v1/channels/telegram/webhook`
-- PIX recebido: `POST /v1/channels/pix/recebido` com `X-Linhabank-Gateway-Token`
+- PIX recebido (Asaas): `POST /v1/channels/pix/asaas` com `asaas-access-token: $ASAAS_WEBHOOK_TOKEN`. Evento `PAYMENT_RECEIVED`.
+- PIX recebido (convênio HTTP): `POST /v1/channels/pix/recebido` com `X-Linhabank-Gateway-Token`
 - Gerência: no Telegram, `/admin` (chat `7069054484`, `LINHABANK_ADMIN_CHATS` ou `/admin` + `ADMIN_TOKEN`). Painel, contas, ficha, extrato, PIX e tarifas.
 - Mini-app: `GET /v1/channels/app/` e `POST /v1/channels/app/api` com `Authorization: tma <initData>`
 - Simular pagamento (só sandbox): `POST /v1/channels/admin/sandbox/pagar` `{ "cobrancaId": "dep-…" }`
@@ -80,6 +84,6 @@ Com `DATABASE_URL`, rode `npm run migrate` e o schema em `migrations/`. Sem Post
 
 ## Publicação
 
-O webhook publicado fica em `$AGENT_ALIAS_URL/v1/channels/telegram/webhook`. Não use `TELEGRAM_POLL=1` junto com o webhook. Inclua o domínio da gateway em `hosting.egressDomains` de `bot/agent.ts`.
+O webhook publicado fica em `$AGENT_ALIAS_URL/v1/channels/telegram/webhook`. Não use `TELEGRAM_POLL=1` junto com o webhook. No Asaas, cadastre `POST $AGENT_ALIAS_URL/v1/channels/pix/asaas` com o token `ASAAS_WEBHOOK_TOKEN`. `bot/agent.ts` já libera `api.asaas.com`.
 
 O painel admin não é uma página web. No Telegram, o chat autorizado envia `/admin` e opera por botões. Na primeira vez, `/admin` + `ADMIN_TOKEN`. Os chats também podem ir em `LINHABANK_ADMIN_CHATS`.

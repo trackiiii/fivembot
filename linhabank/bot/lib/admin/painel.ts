@@ -14,7 +14,7 @@ import {
   type ContaPainel,
 } from "../banco.js";
 import { configAtual, garantirConfig, gravarConfig, unirChatsAdmin } from "../config.js";
-import { gatewayConfigurada } from "../gateway.js";
+import { rotuloLiquidacao } from "../psp.js";
 import { dataHoraBrasil, formatarQuando } from "../horario.js";
 import { ehAdmin, emSandbox } from "../modo.js";
 import { taxaPixExternoCentavos } from "../taxa.js";
@@ -434,7 +434,7 @@ function telaResumo(
     "Gerência de contas",
     "",
     `Ambiente: ${config.modo === "live" ? "produção" : "homologação"}`,
-    `Liquidação PIX: ${gatewayConfigurada() ? "convênio ativo" : "convênio não contratado"}`,
+    `Liquidação PIX: ${rotuloLiquidacao()}`,
     `Custódia: R$ ${reaisDe(painel.totalCentavos)}`,
     `Contas: ${ativas} ativa(s) · ${bloqueadas} bloqueada(s)`,
     `PIX em aberto: ${abertas.length} · R$ ${reaisDe(somaAbertas(painel))}`,
@@ -612,6 +612,7 @@ function telaPix(
   return {
     texto: [
       "Tesouraria PIX",
+      `Liquidação: ${rotuloLiquidacao()}`,
       `Agendamentos ativos: ${agendados}`,
       `Transferência entre contas LinhaBank: isenta`,
       "",
@@ -646,6 +647,7 @@ function telaParametros(config: ReturnType<typeof configAtual>): TelaAdmin {
     "Parametrização operacional",
     "",
     `Instituição: ${config.nomeExibido}`,
+    `Liquidação PIX: ${rotuloLiquidacao()}`,
     `Chave de recebimento: ${config.chaveRecebimento || "não informada"}`,
     `Praça: ${config.cidadeRecebimento}`,
     `Tarifa PIX externo: R$ ${reaisDe(config.taxaCentavos)} + ${config.taxaPercentual}%`,

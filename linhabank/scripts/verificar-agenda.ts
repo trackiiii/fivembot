@@ -220,8 +220,10 @@ assert(
   await abrir(kv, "7", 50_000);
   const url = process.env.PIX_GATEWAY_URL;
   const token = process.env.PIX_GATEWAY_TOKEN;
+  const asaas = process.env.ASAAS_API_KEY;
   delete process.env.PIX_GATEWAY_URL;
   delete process.env.PIX_GATEWAY_TOKEN;
+  delete process.env.ASAAS_API_KEY;
   const antesEnvios = envios;
   await criarAgendamento(
     kv,
@@ -237,6 +239,7 @@ assert(
   assert(avisos.filter((texto) => texto.includes("continua agendado")).length === 1, "avisou a espera mais de uma vez");
   process.env.PIX_GATEWAY_URL = url;
   process.env.PIX_GATEWAY_TOKEN = token;
+  if (asaas !== undefined) process.env.ASAAS_API_KEY = asaas;
   const retomada = await processarAgendamentos(kv, new Date(meioDia.getTime() + 6 * 60_000), avisarDe(avisos));
   assert(retomada.enviados === 1 && (await saldoDe(kv, "7")) === 49_000, "nao retomou o envio depois da espera");
 }

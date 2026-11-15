@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import * as z from "zod/v4";
 
+import { asaasConfigurado } from "./asaas.js";
+
 carregarGatewayLocal();
 
 function carregarGatewayLocal(): void {
@@ -53,9 +55,13 @@ function urlBase(): string | undefined {
   }
 }
 
-export function gatewayConfigurada(): boolean {
+export function gatewayHttpConfigurada(): boolean {
   const token = process.env.PIX_GATEWAY_TOKEN?.trim() ?? "";
   return urlBase() !== undefined && token.length > 0;
+}
+
+export function gatewayConfigurada(): boolean {
+  return asaasConfigurado() || gatewayHttpConfigurada();
 }
 
 export async function enviarPixGateway(pedido: {

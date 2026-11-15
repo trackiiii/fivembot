@@ -1,6 +1,7 @@
-import { enviarPixGateway, gatewayConfigurada, type RespostaEnvio } from "./gateway.js";
+import { asaasConfigurado, cobrancaAsaas, enviarPixAsaas, rotuloAsaas } from "./asaas.js";
 import { chaveRecebimento, montarCopiaECola } from "./brcode.js";
 import { configAtual } from "./config.js";
+import { enviarPixGateway, gatewayHttpConfigurada, type RespostaEnvio } from "./gateway.js";
 import { emSandbox } from "./modo.js";
 
 export type PedidoEnvioPsp = {
@@ -14,15 +15,22 @@ export type CobrancaPsp = {
   copiaECola: string;
   provedor: string;
   chave: string;
+  qrId?: string;
+};
+
+export type PedidoCobrancaPsp = {
+  valorCentavos: number;
+  txid: string;
+  cobrancaId: string;
 };
 
 export type PspAdapter = {
   nome: string;
   enviar(pedido: PedidoEnvioPsp): Promise<RespostaEnvio>;
-  cobranca(pedido: { valorCentavos: number; txid: string }): CobrancaPsp | { ok: false; motivo: "chave_ausente" };
+  cobranca(pedido: PedidoCobrancaPsp): Promise<CobrancaPsp | { ok: false; motivo: "chave_ausente" | "gateway_indisponivel" }>;
 };
 
-function cobrancaLocal(pedido: { valorCentavos: number; txid: string }): CobrancaPsp | { ok: false; motivo: "chave_ausente" } {
+function cobrancaLocal(pedido: PedidoCobrancaPsp): CobrancaPsp | { ok: false; motivo: "chave_ausente" } {
   const chave = chaveRecebimento() ?? (emSandbox() ? "sandbox@linhabank.test" : undefined);
   if (chave === undefined) return { ok: false, motivo: "chave_ausente" };
   return {
@@ -41,7 +49,9 @@ function cobrancaLocal(pedido: { valorCentavos: number; txid: string }): Cobranc
 const httpPsp: PspAdapter = {
   nome: "http",
   enviar: enviarPixGateway,
-  cobranca: cobrancaLocal,
+  async cobranca(pedido) {
+    return cobrancaLocal(pedido);
+  },
 };
 
 const pendentePsp: PspAdapter = {
@@ -49,9 +59,43 @@ const pendentePsp: PspAdapter = {
   async enviar() {
     return { ok: false, motivo: "gateway_pendente" };
   },
-  cobranca: cobrancaLocal,
+  async cobranca(pedido) {
+    return cobrancaLocal(pedido);
+  },
 };
 
+const asaasPsp: PspAdapter = {
+  nome: "asaas",
+  enviar: enviarPixAsaas,
+  async cobranca(pedido) {
+    const gerada = await cobrancaAsaas(pedido);
+    if (!("ok" in gerada)) return gerada;
+    if (emSandbox()) return cobrancaLocal(pedido);
+    return gerada;
+  },
+};
+
+function urlHttpEAsaas(): boolean {
+  const bruto = process.env.PIX_GATEWAY_URL?.trim() ?? "";
+  if (bruto.length === 0) return false;
+  try {
+    const host = new URL(bruto).hostname;
+    return host === "api.asaas.com" || host === "api-sandbox.asaas.com";
+  } catch {
+    return false;
+  }
+}
+
 export function pspAtual(): PspAdapter {
-  return gatewayConfigurada() ? httpPsp : pendentePsp;
+  if (gatewayHttpConfigurada() && !urlHttpEAsaas()) return httpPsp;
+  if (asaasConfigurado()) return asaasPsp;
+  if (gatewayHttpConfigurada()) return httpPsp;
+  return pendentePsp;
+}
+
+export function rotuloLiquidacao(): string {
+  const psp = pspAtual();
+  if (psp.nome === "asaas") return rotuloAsaas();
+  if (psp.nome === "http") return "convênio ativo";
+  return "convênio não contratado";
 }

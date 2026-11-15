@@ -23,7 +23,7 @@ function carregarEnvLocal(): void {
     const igual = limpa.indexOf("=");
     if (igual <= 0) continue;
     const chave = limpa.slice(0, igual).trim();
-    if (!/^(?:TELEGRAM|PIX_GATEWAY|PIX_TAXA|PIX_RECEBIMENTO|LINHABANK|ADMIN)_[A-Z0-9_]+$/.test(chave)) continue;
+    if (!/^(?:TELEGRAM|PIX_GATEWAY|PIX_TAXA|PIX_RECEBIMENTO|LINHABANK|ADMIN|ASAAS)_[A-Z0-9_]+$/.test(chave)) continue;
     if (process.env[chave] !== undefined && process.env[chave] !== "") continue;
     let valor = limpa.slice(igual + 1).trim();
     if (
