@@ -24,6 +24,8 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
       "A chave interna, a agência e o número da conta não são chave PIX para outros bancos.",
       "A Thialinha confirma o PIX enviado com o comprovante da operação.",
       "Cada envio neste chat vai até R$ 5.000,00.",
+      "Um PIX pode ser agendado para um horário, uma vez, todo dia, toda semana ou todo mês. Depois de confirmado, o envio acontece sozinho até o cliente cancelar.",
+      "O cliente cancela um PIX agendado neste chat, informando o código do agendamento.",
     ],
   },
   cartao: {

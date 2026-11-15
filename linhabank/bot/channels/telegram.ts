@@ -3,8 +3,9 @@ import { defineChannel, localDevStrict, POST, sharedSecretAuth } from "@grok/age
 import type { ChannelStartArgs } from "@grok/agent-sdk";
 import * as z from "zod/v4";
 
+import { comandoAgendamentos, listarAgendamentos, processarAgendamentos } from "../lib/agenda.js";
 import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } from "../lib/banco.js";
-import { RESPOSTA_AJUDA, respostaContaAberta } from "../lib/respostas.js";
+import { RESPOSTA_AJUDA, RESPOSTA_SEM_CONTA, respostaContaAberta } from "../lib/respostas.js";
 import {
   type Atualizacao,
   type EstadoTelegram,
@@ -55,6 +56,7 @@ export default defineChannel<EstadoTelegram>({
   async onStart(args) {
     const perfil = await configurarPerfil();
     args.logger(perfil ? "Perfil LinhaBank atualizado no Telegram." : "Perfil do Telegram não atualizado.");
+    iniciarAgendamentos(args.host.kv, args.logger);
     if (process.env.TELEGRAM_POLL !== "1") return;
     void ouvir(args).catch(() => {
       args.logger("A escuta do Telegram parou.");
@@ -137,6 +139,15 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
 
   const decisao = decidirTermos(atualizacao.texto);
   const existente = await lerConta(deps.kv, atualizacao.chatId);
+  if (comandoAgendamentos(atualizacao.texto)) {
+    if (existente === undefined) {
+      await enviarTexto(atualizacao.chatId, RESPOSTA_SEM_CONTA, atualizacao.mensagemId);
+      return;
+    }
+    const lista = await listarAgendamentos(deps.kv, atualizacao.chatId);
+    await enviarPadrao(deps.kv, atualizacao, lista.texto);
+    return;
+  }
   if (existente === undefined && decisao === "pedir") {
     await enviarTermos(atualizacao.chatId, atualizacao.mensagemId);
     return;
@@ -251,6 +262,21 @@ async function entregar(
     entrega.resposta,
     entrega.sessionId,
   );
+}
+
+let agendaLigada = false;
+
+function iniciarAgendamentos(kv: HostKvApi, logger: (linha: string) => void): void {
+  if (agendaLigada) return;
+  agendaLigada = true;
+  const pulso = () => {
+    void processarAgendamentos(kv).catch(() => {
+      logger("PIX agendado não foi processado neste ciclo.");
+    });
+  };
+  pulso();
+  const timer = setInterval(pulso, 20_000);
+  timer.unref();
 }
 
 async function ouvir(args: ChannelStartArgs): Promise<void> {

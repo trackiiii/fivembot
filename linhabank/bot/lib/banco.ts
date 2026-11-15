@@ -44,6 +44,7 @@ export type PedidoConta = {
   chavePix?: string;
   conta?: string;
   descricao?: string;
+  origem?: "agendado";
 };
 
 export type ResultadoOperacao = {
@@ -71,9 +72,10 @@ export const TEXTO_TERMOS = [
   "",
   "1. A conta é individual e de sua titularidade.",
   "2. Agência, número da conta e chave de transferência identificam a sua conta nas movimentações entre clientes LinhaBank.",
-  "3. Saldo, extrato, PIX, transferência, pagamento de boleto e cartão virtual são serviços desta conta.",
+  "3. Saldo, extrato, PIX, PIX agendado, transferência, pagamento de boleto e cartão virtual são serviços desta conta.",
   "4. Neste atendimento não são solicitados senha, código de verificação, CVV nem o número completo do cartão.",
   "5. O uso da conta observa a legislação aplicável. O LinhaBank pode recusar uma operação ou encerrar a conta em caso de uso irregular.",
+  "6. O PIX agendado, depois de confirmado neste atendimento, é enviado automaticamente no horário definido, até que seja cancelado.",
   "",
   "Para abrir a conta, toque em Concordo ou responda CONCORDO.",
 ].join("\n");
@@ -142,7 +144,16 @@ function chaveContaReferencia(referencia: string): string {
 
 function chaveOperacao(sessionId: string, pedido: PedidoConta): string {
   const digest = createHash("sha256")
-    .update(JSON.stringify([pedido.acao, pedido.valor ?? "", pedido.chavePix ?? "", pedido.conta ?? "", pedido.descricao ?? ""]))
+    .update(
+      JSON.stringify([
+        pedido.acao,
+        pedido.valor ?? "",
+        pedido.chavePix ?? "",
+        pedido.conta ?? "",
+        pedido.descricao ?? "",
+        pedido.origem ?? "",
+      ]),
+    )
     .digest("hex")
     .slice(0, 16);
   return `linhabank:op:${sessionId}:${digest}`;
@@ -315,6 +326,14 @@ function destinoInterno(chave: string): boolean {
   return /^lb\d{8}@linhabank$/.test(chave) || /^\d{8}$/.test(chave);
 }
 
+export function classificarChavePix(chave: string): "externa" | "interna" | "invalida" {
+  const destino = chave.trim().toLowerCase();
+  if (destino.length === 0 || destinoInterno(destino)) {
+    return destino.length === 0 ? "invalida" : "interna";
+  }
+  return chaveExternaValida(destino) ? "externa" : "invalida";
+}
+
 function chaveExternaValida(chave: string): boolean {
   if (destinoInterno(chave)) return false;
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(chave)) return true;
@@ -383,7 +402,9 @@ async function executar(
     return { ok: true, valor: reaisDe(centavos), destino: descricao, saldo: reaisDe(conta.saldoCentavos), conta: perfil(conta) };
   }
 
-  if (pedido.acao === "enviar_pix") return enviarPix(kv, conta, centavos, pedido.chavePix, idOperacao);
+  if (pedido.acao === "enviar_pix") {
+    return enviarPix(kv, conta, centavos, pedido.chavePix, idOperacao, pedido.origem === "agendado");
+  }
   if (pedido.acao === "transferir") return transferir(kv, conta, centavos, pedido.conta ?? pedido.chavePix);
   return { ok: false, motivo: "sem_conta" };
 }
@@ -394,12 +415,14 @@ async function enviarPix(
   centavos: number,
   chaveInformada: string | undefined,
   idOperacao: string,
+  agendado = false,
 ): Promise<ResultadoOperacao> {
   const destino = (chaveInformada ?? "").trim().toLowerCase();
-  if (destinoInterno(destino)) {
+  const classe = classificarChavePix(destino);
+  if (classe === "interna") {
     return { ok: false, motivo: "destino_interno", saldo: reaisDe(conta.saldoCentavos), conta: perfil(conta) };
   }
-  if (!chaveExternaValida(destino)) {
+  if (classe !== "externa") {
     return { ok: false, motivo: "chave_ausente", saldo: reaisDe(conta.saldoCentavos) };
   }
   if (!gatewayConfigurada()) {
@@ -443,7 +466,7 @@ async function enviarPix(
     await kv.delete(reservaChave);
     return { ok: false, motivo: resposta.motivo, saldo: reaisDe(atual.saldoCentavos), conta: perfil(atual) };
   }
-  lancar(atual, "pix_enviado", -centavos, `PIX para ${destino}`);
+  lancar(atual, "pix_enviado", -centavos, `${agendado ? "PIX agendado" : "PIX"} para ${destino}`);
   await gravarConta(kv, atual);
   await kv.put(reservaChave, { debitado: true, status: "enviado", endToEndId: resposta.endToEndId });
   return {

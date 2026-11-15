@@ -378,6 +378,7 @@ export async function configurarPerfil(): Promise<boolean> {
   const comandos = [
     { command: "start", description: "Começar o atendimento com a Thialinha" },
     { command: "ajuda", description: "Ver como a Thialinha pode ajudar" },
+    { command: "agendamentos", description: "Ver os PIX agendados" },
   ];
   const nome = await chamarTelegram("setMyName", { name: "LinhaBank" });
   if (!nome) return false;
@@ -386,7 +387,7 @@ export async function configurarPerfil(): Promise<boolean> {
   });
   await chamarTelegram("setMyDescription", {
     description:
-      "A Thialinha cuida da sua conta no LinhaBank. Saldo, PIX, transferência e cartão virtual ficam neste chat.",
+      "A Thialinha cuida da sua conta no LinhaBank. Saldo, PIX, PIX agendado, transferência e cartão virtual ficam neste chat.",
   });
   await chamarTelegram("setMyCommands", { commands: comandos });
   return true;
