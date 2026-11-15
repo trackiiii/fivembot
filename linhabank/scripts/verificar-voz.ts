@@ -11,7 +11,7 @@ function assert(condicao: boolean, mensagem: string): void {
   assert(textoParaFala("00020126580014br.gov.bcb.pix") === undefined, "BR Code foi falado");
   assert(textoParaFala("a") === undefined, "letra solta foi falada");
   assert(textoParaFala("Veja https://linhabank.test/x agora") === "Veja agora", "URL ficou na fala");
-  assert(prepararFala("Oi, Thialinha. Saldo no LinhaBank.") === "Oi, Tia linha. ... Saldo no Linha Bank. ...", "pausas da fala");
+  assert(prepararFala("Oi, Thialinha. Saldo no LinhaBank.") === "Oi, Tia linha. Saldo no Linha Bank.", "nomes na fala");
 }
 
 if (vozDisponivel()) {

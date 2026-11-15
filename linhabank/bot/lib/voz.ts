@@ -36,8 +36,6 @@ export function prepararFala(texto: string): string {
     .replace(/\bThialinha\b/gi, "Tia linha")
     .replace(/\bLinhaBank\b/gi, "Linha Bank")
     .replace(/\bLBcoins\b/gi, "éle bê coins")
-    .replace(/([.!?])(\s+|$)/g, "$1 ... ")
-    .replace(/:\s+/g, ". ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -92,9 +90,9 @@ export async function sintetizarVoz(texto: string): Promise<Uint8Array | undefin
 
 function perfilVoz(): string[] {
   if (arquivoExecutavel(MBROLA_BR4) && comandoExiste("mbrola") !== undefined) {
-    return ["-v", "mb-br4", "-s", "122", "-g", "10", "-p", "48", "-a", "140"];
+    return ["-v", "mb-br4", "-s", "168", "-g", "3", "-p", "52", "-a", "140"];
   }
-  return ["-v", "pt-br", "-s", "108", "-g", "16", "-p", "42", "-a", "140"];
+  return ["-v", "pt-br", "-s", "150", "-g", "5", "-p", "45", "-a", "140"];
 }
 
 function garantirBins(): void {
