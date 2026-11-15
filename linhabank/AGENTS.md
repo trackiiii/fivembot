@@ -26,7 +26,7 @@ Run the CLI under Node, never Bun.
 
 ## Atendimento
 
-- A fala da Thialinha fica em `bot/instructions.md`. Cumprimento, saldo simples e outras intenções da biblioteca em `bot/lib/conversa/` respondem localmente, sem o modelo. PIX de envio, agendamento e o que a classificação não cobrir seguem no turno do modelo.
+- A fala da Thialinha fica em `bot/instructions.md`. Cumprimento, saldo simples e outras intenções da biblioteca em `bot/lib/conversa/` respondem localmente, sem o modelo. PIX de envio, agendamento e o que a classificação não cobrir seguem no turno do modelo. No Telegram ela também manda nota de voz (`bot/lib/voz.ts`, `espeak-ng` + `ffmpeg`) quando a voz está ligada; gerência, anúncio, manutenção e copia e cola do PIX ficam só em texto.
 - O histórico de cada chat do Telegram fica em `ctx.host.kv`, na chave `linhabank:chat:<id>`.
 - Cada chat tem a própria conta. Saldo e extrato saem do ledger. Sem `DATABASE_URL` o ledger fica no kv; com Postgres, o SQL é a fonte da verdade. Com `ASAAS_API_KEY`, o PSP é o Asaas (`POST /v3/transfers` e QR estático). Sem Asaas, o adaptador HTTP `POST /v1/pix/enviar` continua. Agência, número e chave interna servem para transferência entre contas LinhaBank.
 - Depósito PIX gera cobrança (QR + copia e cola). Crédito só no webhook do provedor, com idempotência. Foto de comprovante não credita. Webhook Asaas e webhook da gateway não compartilham o mesmo token na rota. HTTP `/v1/channels/admin/config` não troca modo nem operadores.

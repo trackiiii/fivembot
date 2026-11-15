@@ -96,7 +96,8 @@ function semIa(texto: string): void {
   assert(parseAcao("a:ir:0")?.tipo === "rejeitar_indicacao", "botão recusar indicação");
   assert((parseAcao("a:k:l") as { campo?: string }).campo === "lbcoinsIndicacao", "botão LBcoins indicação");
   assert(parseAcao("a:t:m")?.tipo === "toggle", "botão manutenção");
-  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:n", "a:nl", "a:np", "a:ns", "a:ny", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:t:m", "a:q", "a:k:m", "a:h", "a:ic:m", "a:ic:c", "a:k:l", "a:en:0", "a:eg:0", "a:eu:0", "a:ek:0", "a:ef:0", "a:b:0"];
+  assert(parseAcao("a:t:v")?.tipo === "toggle", "botão voz");
+  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:n", "a:nl", "a:np", "a:ns", "a:ny", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:v", "a:t:b", "a:t:m", "a:q", "a:k:m", "a:h", "a:ic:m", "a:ic:c", "a:k:l", "a:en:0", "a:eg:0", "a:eu:0", "a:ek:0", "a:ef:0", "a:b:0"];
   for (const dados of todos) {
     assert(parseAcao(dados) !== undefined, `callback ${dados}`);
     assert(dados.length <= 64, `callback longo ${dados}`);
@@ -176,6 +177,9 @@ function semIa(texto: string): void {
   const prefixo = await aplicarAcao(kv, "1001", "a:t:p");
   assert(configAtual().prefixoThialinha === false, "identificação no atendimento não desligou");
   assert(prefixo.tela.texto.includes("Mais opções"), "depois do toggle não voltou às opções");
+  const voz = await aplicarAcao(kv, "1001", "a:t:v");
+  assert(configAtual().vozThialinha === false, "voz da Thialinha não desligou");
+  assert(voz.tela.teclado.flat().some((item) => item.text === "Voz: off"), "botão da voz não ficou off");
   assert(temVoltar(prefixo.tela, "a:g"), "mais opções sem voltar aos ajustes");
   assert(opcoesIndividuais(prefixo.tela), "mais opções com botões juntos");
   semIa(prefixo.tela.texto);

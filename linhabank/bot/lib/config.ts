@@ -15,6 +15,7 @@ export type ConfigBot = {
   limiteCentavos: number;
   webappUrl: string;
   prefixoThialinha: boolean;
+  vozThialinha: boolean;
   botaoMiniApp: boolean;
   manutencao: boolean;
   chatsAdmin: string;
@@ -44,6 +45,7 @@ export function defaultsEnv(): ConfigBot {
     limiteCentavos: inteiroEnv(process.env.LINHABANK_LIMITE_CENTAVOS, 500_000, 2_000_000) || 500_000,
     webappUrl: (process.env.TELEGRAM_WEBAPP_URL ?? "").trim(),
     prefixoThialinha: process.env.LINHABANK_PREFIXO_THIALINHA?.trim() !== "0",
+    vozThialinha: process.env.LINHABANK_VOZ?.trim() !== "0",
     botaoMiniApp: process.env.LINHABANK_BOTAO_APP?.trim() !== "0",
     manutencao: process.env.LINHABANK_MANUTENCAO?.trim() === "1",
     chatsAdmin: (process.env.LINHABANK_ADMIN_CHATS ?? "").trim(),
@@ -146,6 +148,7 @@ function aplicarPedido(base: ConfigBot, pedido: unknown): ConfigBot {
     proximo.webappUrl = url.length === 0 || /^https:\/\//i.test(url) ? url.slice(0, 300) : base.webappUrl;
   }
   if (typeof bruto.prefixoThialinha === "boolean") proximo.prefixoThialinha = bruto.prefixoThialinha;
+  if (typeof bruto.vozThialinha === "boolean") proximo.vozThialinha = bruto.vozThialinha;
   if (typeof bruto.botaoMiniApp === "boolean") proximo.botaoMiniApp = bruto.botaoMiniApp;
   if (typeof bruto.manutencao === "boolean") proximo.manutencao = bruto.manutencao;
   if (typeof bruto.chatsAdmin === "string") {

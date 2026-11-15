@@ -701,7 +701,7 @@ export function parseAcao(dados: string):
   | { tipo: "cancelar_pix"; indice: number }
   | { tipo: "cartao"; indice: number }
   | { tipo: "pedir"; campo: CampoPendente; indice?: number }
-  | { tipo: "toggle"; campo: "prefixoThialinha" | "botaoMiniApp" | "manutencao" }
+  | { tipo: "toggle"; campo: "prefixoThialinha" | "vozThialinha" | "botaoMiniApp" | "manutencao" }
   | { tipo: "cancelar" }
   | { tipo: "atualizar" }
   | { tipo: "anuncio_limpar" }
@@ -730,6 +730,7 @@ export function parseAcao(dados: string):
   if (dados === "a:z") return { tipo: "cancelar" };
   if (dados === "a:r") return { tipo: "atualizar" };
   if (dados === "a:t:p") return { tipo: "toggle", campo: "prefixoThialinha" };
+  if (dados === "a:t:v") return { tipo: "toggle", campo: "vozThialinha" };
   if (dados === "a:t:b") return { tipo: "toggle", campo: "botaoMiniApp" };
   if (dados === "a:t:m") return { tipo: "toggle", campo: "manutencao" };
   if (dados === "a:q") return { tipo: "pedir", campo: "busca" };
@@ -1178,6 +1179,7 @@ function telaMais(config: ReturnType<typeof configAtual>): TelaAdmin {
     "Mais opções",
     "",
     `Nome no chat: ${config.prefixoThialinha ? "ligado" : "desligado"}`,
+    `Voz no atendimento: ${config.vozThialinha ? "ligada" : "desligada"}`,
     `Aplicativo: ${config.botaoMiniApp ? "ligado" : "desligado"}`,
     `Manutenção: ${config.manutencao ? "ligada" : "desligada"}`,
     `URL do aplicativo: ${config.webappUrl || "não informada"}`,
@@ -1188,6 +1190,7 @@ function telaMais(config: ReturnType<typeof configAtual>): TelaAdmin {
     teclado: [
       ...opcoes(
         { text: config.prefixoThialinha ? "Nome no chat: on" : "Nome no chat: off", callback_data: "a:t:p" },
+        { text: config.vozThialinha ? "Voz: on" : "Voz: off", callback_data: "a:t:v" },
         { text: config.botaoMiniApp ? "App: on" : "App: off", callback_data: "a:t:b" },
         { text: config.manutencao ? "Manutenção: on" : "Manutenção: off", callback_data: "a:t:m" },
         { text: "URL do app", callback_data: "a:k:w" },

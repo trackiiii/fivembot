@@ -7,6 +7,7 @@ import * as z from "zod/v4";
 
 import { TEXTO_TERMOS, type ResumoConta } from "./banco.js";
 import { configAtual } from "./config.js";
+import { sintetizarVoz } from "./voz.js";
 
 carregarEnvLocal();
 
@@ -481,6 +482,35 @@ export async function enviarFotoId(
   return resposta.ok === true;
 }
 
+async function enviarVoz(
+  chatId: string,
+  ogg: Uint8Array,
+  caption: string,
+  replyTo?: number,
+): Promise<{ ok: boolean; mensagemId?: number }> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (token === undefined || token.length === 0) return { ok: false };
+  try {
+    const form = new FormData();
+    form.set("chat_id", chatId);
+    const captionHtml = comParseHtml(caption.slice(0, 1024), true);
+    form.set("caption", captionHtml.text);
+    if (captionHtml.parse_mode !== undefined) form.set("parse_mode", captionHtml.parse_mode);
+    if (replyTo !== undefined) form.set("reply_parameters", JSON.stringify({ message_id: replyTo }));
+    form.set("voice", new Blob([Buffer.from(ogg)], { type: "audio/ogg" }), "thialinha.ogg");
+    const resposta = await fetch(`https://api.telegram.org/bot${token}/sendVoice`, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(20000),
+    });
+    const corpo = (await resposta.json().catch(() => null)) as RespostaTelegram | null;
+    if (!resposta.ok || corpo?.ok !== true) return { ok: false };
+    return { ok: true, mensagemId: corpo.result?.message_id };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function enviarFoto(chatId: string, png: Uint8Array, caption: string): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (token === undefined || token.length === 0) return false;
@@ -527,6 +557,19 @@ export async function enviarMensagem(
   opcoes: OpcoesEnvio = {},
 ): Promise<{ ok: boolean; mensagemId?: number }> {
   const prefixo = opcoes.prefixo !== false;
+  if (
+    prefixo &&
+    opcoes.editar === undefined &&
+    opcoes.teclado === undefined &&
+    configAtual().vozThialinha
+  ) {
+    const audio = await sintetizarVoz(texto);
+    if (audio !== undefined) {
+      await chamarTelegram("sendChatAction", { chat_id: chatId, action: "record_voice" });
+      const voz = await enviarVoz(chatId, audio, textoParaEnvio(texto, prefixo), opcoes.replyTo);
+      if (voz.ok) return voz;
+    }
+  }
   const partes = pedacos(textoParaEnvio(texto, prefixo)).map((parte) => comParseHtml(parte, prefixo));
   if (opcoes.editar !== undefined && opcoes.editar > 0) {
     const primeira = partes[0] ?? { text: "" };
@@ -672,7 +715,7 @@ export async function lerAtualizacoes(
 }
 
 export const RESPOSTA_SEM_TEXTO =
-  "Eu leio texto. Escreve o que você precisa — saldo, PIX, depósito — que eu te ajudo.";
+  "Eu falo por áudio, mas leio o que você escreve. Manda saldo, PIX ou depósito por texto.";
 
 export const AVISO_FALHA =
   "Travou daqui. Manda de novo daqui a pouco que eu te cubro.";
