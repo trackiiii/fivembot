@@ -10,7 +10,9 @@ delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_CENTAVOS;
 delete process.env.PIX_TAXA_GATEWAY_RECEBIMENTO_PERCENTUAL;
 delete process.env.LINHABANK_ADMIN_CHATS;
 
-const { aceitarTermos, bloquearConta, operarConta } = await import("../bot/lib/banco.js");
+const { aceitarTermos, bloquearConta, buscarContaLinhaBank, lerConta, operarConta } = await import(
+  "../bot/lib/banco.js"
+);
 const { interpretarAtualizacao } = await import("../bot/lib/atendimento.js");
 const { garantirConfig, gravarConfig, configAtual } = await import("../bot/lib/config.js");
 const { taxaPixExternoCentavos, taxaPixExternoRecebimentoCentavos } = await import("../bot/lib/taxa.js");
@@ -67,7 +69,12 @@ function semIa(texto: string): void {
   assert(parseAcao("a:o")?.tipo === "aba", "botão Mais opções");
   assert(parseAcao("a:k:f")?.tipo === "pedir", "botão tarifa");
   assert((parseAcao("a:k:m") as { campo?: string }).campo === "canalMovimento", "botão canal de movimento");
-  assert(parseAcao("a:b:0")?.tipo === "bloquear", "botão bloquear");
+  assert(parseAcao("a:b:0")?.tipo === "bloquear", "botão desativar");
+  assert((parseAcao("a:en:0") as { campo?: string }).campo === "clienteNome", "botão titular");
+  assert((parseAcao("a:eg:0") as { campo?: string }).campo === "clienteAgencia", "botão agência");
+  assert((parseAcao("a:eu:0") as { campo?: string }).campo === "clienteNumero", "botão número");
+  assert((parseAcao("a:ek:0") as { campo?: string }).campo === "clienteChave", "botão chave");
+  assert((parseAcao("a:ef:0") as { campo?: string }).campo === "clienteCartao", "botão final cartão");
   assert(parseAcao("a:d:0")?.tipo === "aba", "botão ficha");
   assert(parseAcao("a:j:0")?.tipo === "cartao", "botão cartão");
   assert(parseAcao("a:y:1")?.tipo === "cancelar_pix", "botão cancelar PIX");
@@ -77,7 +84,7 @@ function semIa(texto: string): void {
   assert(parseAcao("a:ia:0")?.tipo === "aprovar_indicacao", "botão aprovar indicação");
   assert(parseAcao("a:ir:0")?.tipo === "rejeitar_indicacao", "botão recusar indicação");
   assert((parseAcao("a:k:l") as { campo?: string }).campo === "lbcoinsIndicacao", "botão LBcoins indicação");
-  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:n", "a:nl", "a:np", "a:ns", "a:ny", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m", "a:h", "a:ic:m", "a:ic:c", "a:k:l"];
+  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:n", "a:nl", "a:np", "a:ns", "a:ny", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m", "a:h", "a:ic:m", "a:ic:c", "a:k:l", "a:en:0", "a:eg:0", "a:eu:0", "a:ek:0", "a:ef:0", "a:b:0"];
   for (const dados of todos) {
     assert(parseAcao(dados) !== undefined, `callback ${dados}`);
     assert(dados.length <= 64, `callback longo ${dados}`);
@@ -154,16 +161,29 @@ function semIa(texto: string): void {
   const conta = await aceitarTermos(kv, "77", "Ana");
   const lista = await aplicarAcao(kv, "1001", "a:c");
   assert(lista.tela.texto.includes("Ana"), "contas sem a titular");
-  assert(lista.tela.teclado.flat().some((b) => b.callback_data === "a:b:0"), "contas sem bloquear");
+  assert(lista.tela.teclado.flat().some((b) => b.callback_data === "a:b:0"), "contas sem desativar");
+  assert(lista.tela.teclado.flat().some((item) => item.text === "Desativar"), "lista sem Ativar/Desativar");
   assert(lista.tela.teclado.flat().some((b) => b.callback_data === "a:d:0"), "contas sem ficha");
   const ficha = await aplicarAcao(kv, "1001", "a:d:0");
   assert(ficha.tela.texto.includes("Ficha cadastral"), "ficha não abriu");
   assert(ficha.tela.texto.includes(conta.numero), "ficha sem número");
   assert(ficha.tela.texto.includes("Agência"), "ficha sem agência");
+  assert(ficha.tela.texto.includes("Telegram: 77"), "ficha sem chat id");
   assert(ficha.tela.texto.includes("Cartão virtual"), "ficha sem cartão");
+  assert(ficha.tela.teclado.flat().some((item) => item.text === "Titular" && item.callback_data === "a:en:0"), "ficha sem editar titular");
+  assert(ficha.tela.teclado.flat().some((item) => item.text === "Desativar conta"), "ficha sem desativar");
   semIa(ficha.tela.texto);
-  const bloqueada = await aplicarAcao(kv, "1001", "a:b:0");
-  assert((bloqueada.aviso ?? "").includes("bloqueada"), "bloquear pela gerência falhou");
+  const desativada = await aplicarAcao(kv, "1001", "a:b:0");
+  assert((desativada.aviso ?? "").includes("desativada"), "desativar pela gerência falhou");
+  assert(desativada.avisoCliente?.chatId === "77", "cliente não foi avisado da desativação");
+  const pixParado = await operarConta(kv, "77", "pix-desativada", {
+    acao: "enviar_pix",
+    valor: "10,00",
+    chavePix: "ana@email.com",
+  });
+  assert(pixParado.ok === false && pixParado.motivo === "conta_bloqueada", "conta desativada enviou PIX");
+  const ativada = await aplicarAcao(kv, "1001", "a:b:0");
+  assert((ativada.aviso ?? "").includes("ativada"), "ativar pela gerência falhou");
   const cartao = await aplicarAcao(kv, "1001", "a:j:0");
   assert((cartao.aviso ?? "").includes("Cartão"), "bloquear cartão falhou");
   const extrato = await aplicarAcao(kv, "1001", "a:e:0");
@@ -173,6 +193,38 @@ function semIa(texto: string): void {
   assert(busca?.tela.texto.includes("Ficha cadastral") === true, "localizar conta não abriu a ficha");
   const livre = await bloquearConta(kv, "77", false);
   assert(livre?.status === "ativa", "liberar depois do painel falhou");
+}
+
+{
+  const kv = kvMemoria();
+  await gravarConfig(kv, { chatsAdmin: "1001" });
+  const ana = await aceitarTermos(kv, "77", "Ana");
+  const bia = await aceitarTermos(kv, "88", "Bia");
+  await aplicarAcao(kv, "1001", "a:d:0");
+  await aplicarAcao(kv, "1001", "a:en:0");
+  const nome = await aplicarTextoAdmin(kv, "1001", "Ana Souza");
+  assert(nome?.aviso === "Cadastro atualizado.", `editar titular: ${nome?.aviso}`);
+  assert(nome?.tela.texto.includes("Ana Souza") === true, "ficha sem o novo titular");
+  await aplicarAcao(kv, "1001", "a:eg:0");
+  const agencia = await aplicarTextoAdmin(kv, "1001", "17");
+  assert(agencia?.tela.texto.includes("Agência 0017") === true, "agência não gravou");
+  await aplicarAcao(kv, "1001", "a:eu:0");
+  const duplicado = await aplicarTextoAdmin(kv, "1001", bia.numero);
+  assert((duplicado?.tela.aviso ?? "").includes("já está em uso"), "número duplicado passou");
+  await aplicarAcao(kv, "1001", "a:eu:0");
+  const numero = await aplicarTextoAdmin(kv, "1001", "87654321");
+  assert(numero?.aviso === "Cadastro atualizado.", `editar número: ${numero?.aviso}`);
+  assert(numero?.tela.texto.includes("87654321") === true, "ficha sem o novo número");
+  const antiga = await buscarContaLinhaBank(kv, ana.numero);
+  assert(antiga === undefined, "índice do número antigo ficou ativo");
+  const atual = await lerConta(kv, "77");
+  assert(atual?.numero === "87654321", "número não persistiu");
+  assert(atual?.chaveInterna === "lb87654321@linhabank", "chave padrão não acompanhou o número");
+  const porChave = await buscarContaLinhaBank(kv, "lb87654321@linhabank");
+  assert(porChave?.chatId === "77", "chave nova não localiza a conta");
+  await aplicarAcao(kv, "1001", "a:ef:0");
+  const cartaoFinal = await aplicarTextoAdmin(kv, "1001", "4321");
+  assert(cartaoFinal?.tela.texto.includes("**** 4321") === true, "final do cartão não gravou");
 }
 
 {

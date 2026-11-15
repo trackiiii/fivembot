@@ -69,7 +69,7 @@ export default defineChannel({
       },
     }),
     POST("/bloquear", {
-      description: "Bloqueia ou libera uma conta.",
+      description: "Desativa ou ativa uma conta.",
       bodySchema: z.object({
         chatId: z.string().min(1).max(32),
         bloquear: z.boolean(),

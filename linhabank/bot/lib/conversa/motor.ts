@@ -6,6 +6,7 @@ import { listarCobrancasSql } from "../store-sql.js";
 import { operarConta, reaisDe } from "../banco.js";
 import { consultarClube, rotuloCategoria } from "../fidelidade/index.js";
 import { configAtual } from "../config.js";
+import { RESPOSTA_CONTA_DESATIVADA } from "../respostas.js";
 import { FALAS_DEPOSITO_GERADO, falasDa } from "./biblioteca/index.js";
 import { classificarTexto, extrairValorDeposito } from "./classificar.js";
 import { escolherFala, preencher, primeiroNome, registrarUso } from "./escolher.js";
@@ -44,6 +45,11 @@ export async function responderLocal(
     } else if (temConta) {
       const gerado = await operarConta(kv, chatId, idOperacao, { acao: "depositar", valor: valorDeposito });
       if (!gerado.ok || gerado.copiaECola === undefined || gerado.valor === undefined) {
+        if (gerado.motivo === "conta_bloqueada") {
+          const novo = registrarUso({ ...estado, pendente: undefined }, "tecnico", "conta-desativada");
+          await gravarEstadoFala(kv, chatId, novo);
+          return { tipo: "texto", texto: RESPOSTA_CONTA_DESATIVADA, categoria: "tecnico", falaId: "conta-desativada" };
+        }
         categoria = gerado.motivo === "sem_conta" ? "cadastro" : "tecnico";
       } else {
         slots.valor = gerado.valor;

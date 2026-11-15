@@ -64,6 +64,9 @@ export const RESPOSTA_SEM_CONTA =
 export const RESPOSTA_PIX_INDISPONIVEL =
   "O PIX não saiu. O saldo permanece o mesmo, relaxa. Quer tentar de novo agora?";
 
+export const RESPOSTA_CONTA_DESATIVADA =
+  "Sua conta está desativada. PIX e depósitos ficam parados até a gerência reativar.";
+
 export const RESPOSTA_DESTINO_INTERNO =
   "Essa chave é de uma conta LinhaBank. Nesse caso o PIX vai direto, sem taxa. Quer continuar?";
 

@@ -120,7 +120,7 @@ export async function aplicarFotoRascunho(
 
 export async function telaAnuncio(kv: HostKvApi, chatId: string, nav: BotaoAdmin[][]): Promise<TelaAdmin> {
   const rascunho = await lerRascunho(kv, chatId);
-  const destinos = await listarChatIdsClientes(kv);
+  const destinos = await listarChatIdsClientes(kv, true);
   const historico = await lerHistorico(kv);
   const linhasHistorico =
     historico.length === 0
@@ -131,7 +131,7 @@ export async function telaAnuncio(kv: HostKvApi, chatId: string, nav: BotaoAdmin
         });
   const texto = [
     "Anúncio",
-    "Envio para todas as contas do LinhaBank.",
+    "Envio para as contas ativas do LinhaBank.",
     "",
     `Destinatários: ${destinos.length} conta(s)`,
     "",
@@ -193,7 +193,7 @@ export async function enviarAnuncioAosClientes(
   rascunho: RascunhoAnuncio,
   operador: string,
 ): Promise<{ destinatarios: number; entregues: number; falhas: number }> {
-  const destinos = await listarChatIdsClientes(kv);
+  const destinos = await listarChatIdsClientes(kv, true);
   let entregues = 0;
   let falhas = 0;
   for (const destino of destinos) {

@@ -36,7 +36,7 @@ function contaDe(row: ContaRow, extrato: Movimento[] = []): Conta {
     saldoCentavos: inteiro(row.saldo_centavos),
     cartaoFinal: row.cartao_final,
     cartaoBloqueado: row.cartao_bloqueado,
-    status: row.status === "bloqueada" ? "bloqueada" : "ativa",
+    status: row.status === "bloqueada" || row.status === "desativada" ? "desativada" : "ativa",
     versao: row.versao,
     extrato,
   };
@@ -50,6 +50,10 @@ export async function upsertContaSql(conta: Conta): Promise<void> {
     ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     on conflict (chat_id) do update set
       nome = excluded.nome,
+      agencia = excluded.agencia,
+      numero = excluded.numero,
+      chave_interna = excluded.chave_interna,
+      cartao_final = excluded.cartao_final,
       cartao_bloqueado = excluded.cartao_bloqueado,
       status = excluded.status,
       versao = excluded.versao,
@@ -71,6 +75,16 @@ export async function upsertContaSql(conta: Conta): Promise<void> {
       conta.versao,
     ],
   );
+}
+
+export async function chatIdPorNumeroSql(numero: string): Promise<string | undefined> {
+  const rows = await sql<{ chat_id: string }>("select chat_id from contas where numero = $1 limit 1", [numero]);
+  return rows[0]?.chat_id;
+}
+
+export async function chatIdPorChaveInternaSql(chave: string): Promise<string | undefined> {
+  const rows = await sql<{ chat_id: string }>("select chat_id from contas where chave_interna = $1 limit 1", [chave]);
+  return rows[0]?.chat_id;
 }
 
 export async function lerContaSql(chatId: string): Promise<Conta | undefined> {
@@ -125,7 +139,11 @@ export async function aplicarSql(pedido: {
     for (const movimento of pedido.movimentos) {
       const conta = contas.get(movimento.chatId);
       if (conta === undefined) return { ok: false as const, motivo: "sem_conta" as const };
-      if (conta.status === "bloqueada" && movimento.valorCentavos < 0 && movimento.tipo !== "taxa") {
+      if (
+        (conta.status === "bloqueada" || conta.status === "desativada") &&
+        movimento.valorCentavos < 0 &&
+        movimento.tipo !== "taxa"
+      ) {
         return { ok: false as const, motivo: "conta_bloqueada" as const };
       }
       const saldo = saldos.get(movimento.chatId) ?? 0;

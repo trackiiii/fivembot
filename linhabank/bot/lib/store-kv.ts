@@ -158,7 +158,7 @@ export async function aplicarAtomico(
     for (const movimento of pedido.movimentos) {
       const conta = mapa.get(movimento.chatId);
       if (conta === undefined) return { ok: false as const, motivo: "sem_conta" as const, contas: [] };
-      if (conta.status === "bloqueada" && movimento.valorCentavos < 0 && movimento.tipo !== "taxa") {
+      if (conta.status !== "ativa" && movimento.valorCentavos < 0 && movimento.tipo !== "taxa") {
         return { ok: false as const, motivo: "conta_bloqueada" as const, contas: [...mapa.values()] };
       }
       const saldo = saldos.get(movimento.chatId) ?? 0;

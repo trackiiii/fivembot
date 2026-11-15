@@ -482,6 +482,13 @@ export async function listarAuditoria(kv: HostKvApi, limite = 16): Promise<Audit
   return sqlDisponivel() ? listarAuditoriaSql(limite) : listarAuditoriaKv(kv, limite);
 }
 
+export async function registrarAuditoria(
+  kv: HostKvApi,
+  item: Omit<AuditoriaAdmin, "id" | "em">,
+): Promise<void> {
+  await auditar(kv, item);
+}
+
 export async function historicoCategoria(kv: HostKvApi, chatId: string): Promise<{ em: string; de: CategoriaClube; para: CategoriaClube }[]> {
   const lista = sqlDisponivel() ? await historicoXpSql(chatId, 12) : await historicoXpKv(kv, chatId, 12);
   return lista

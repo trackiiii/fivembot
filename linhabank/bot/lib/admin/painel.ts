@@ -8,11 +8,14 @@ import {
   bloquearConta,
   cancelarCobrancaAberta,
   confirmarCobrancaSandbox,
+  contaInativa,
+  editarContaAdmin,
   listarChatIdsClientes,
   operarConta,
   painelCarteira,
   reaisDe,
   type ContaPainel,
+  type PatchContaAdmin,
 } from "../banco.js";
 import { idCanalValido } from "../canal.js";
 import { configAtual, garantirConfig, gravarConfig, unirChatsAdmin } from "../config.js";
@@ -39,6 +42,7 @@ import {
   consultarClube,
   decidirIndicacao,
   listarPendentes,
+  registrarAuditoria,
   rotuloCategoria,
 } from "../fidelidade/index.js";
 
@@ -78,7 +82,20 @@ export type CampoPendente =
   | "beneficioPrata"
   | "beneficioOuro"
   | "lbcoinsAjuste"
-  | "xpAjuste";
+  | "xpAjuste"
+  | "clienteNome"
+  | "clienteAgencia"
+  | "clienteNumero"
+  | "clienteChave"
+  | "clienteCartao";
+
+const CAMPOS_CLIENTE: CampoPendente[] = [
+  "clienteNome",
+  "clienteAgencia",
+  "clienteNumero",
+  "clienteChave",
+  "clienteCartao",
+];
 
 export type BotaoAdmin = { text: string; callback_data: string };
 
@@ -141,6 +158,11 @@ const ROTULO_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   beneficioOuro: "benefício extra do Ouro",
   lbcoinsAjuste: "ajuste de LBcoins",
   xpAjuste: "ajuste de XP",
+  clienteNome: "nome do titular",
+  clienteAgencia: "agência",
+  clienteNumero: "número da conta",
+  clienteChave: "chave interna",
+  clienteCartao: "final do cartão",
 };
 
 const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
@@ -161,6 +183,11 @@ const DICA_CAMPO: Record<Exclude<CampoPendente, "busca">, string> = {
   beneficioOuro: "Texto curto. Vazio usa o texto padrão honesto.",
   lbcoinsAjuste: "Quantidade (positiva ou negativa) e o motivo. Ex.: 100 bônus de campanha.",
   xpAjuste: "Quantidade de XP (positiva ou negativa) e o motivo. Ex.: 50 correção.",
+  clienteNome: "2 a 64 caracteres. Ex.: Ana Souza.",
+  clienteAgencia: "Até 4 dígitos. Ex.: 0001.",
+  clienteNumero: "8 dígitos. Precisa ser único.",
+  clienteChave: "8 a 77 caracteres, sem espaço. Ex.: lb12345678@linhabank.",
+  clienteCartao: "4 dígitos do cartão virtual.",
 };
 
 const ROTULO_MOVIMENTO: Record<string, string> = {
@@ -231,7 +258,10 @@ export async function abrirTelaInicial(kv: HostKvApi, chatId: string): Promise<T
 
 export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdmin> {
   const pendente = await lerPendente(kv, chatId);
-  if (pendente !== undefined) return telaPendente(pendente);
+  if (pendente !== undefined) {
+    const ui = await lerUi(kv, chatId);
+    return telaPendente(pendente, await valorAtualCadastro(kv, pendente, ui.indice));
+  }
   const ui = await lerUi(kv, chatId);
   const config = await garantirConfig(kv);
   const painel = await painelCarteira(kv);
@@ -252,7 +282,7 @@ export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdm
   if (ui.aba === "anuncio") return telaAnuncio(kv, chatId, nav("anuncio"));
   if (ui.aba === "anunciook") {
     const rascunho = await lerRascunho(kv, chatId);
-    return telaConfirmarAnuncio(rascunho, (await listarChatIdsClientes(kv)).length, nav("anuncio"));
+    return telaConfirmarAnuncio(rascunho, (await listarChatIdsClientes(kv, true)).length, nav("anuncio"));
   }
   return telaResumo(painel, config, await contarAgendamentosAtivos(kv));
 }
@@ -309,7 +339,8 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
       const ui = await lerUi(kv, chatId);
       await gravarUi(kv, chatId, { ...ui, indice: acao.indice });
     }
-    return { tela: telaPendente(acao.campo) };
+    const indice = acao.indice ?? (await lerUi(kv, chatId)).indice;
+    return { tela: telaPendente(acao.campo, await valorAtualCadastro(kv, acao.campo, indice)) };
   }
   if (acao.tipo === "anuncio_limpar") {
     await limparRascunho(kv, chatId);
@@ -335,7 +366,7 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
       await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
       return { tela: await montarTela(kv, chatId), aviso: "Informe o texto ou anexe uma imagem." };
     }
-    const destinos = await listarChatIdsClientes(kv);
+    const destinos = await listarChatIdsClientes(kv, true);
     if (destinos.length === 0) {
       await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
       return { tela: await montarTela(kv, chatId), aviso: "Nenhuma conta para receber o comunicado." };
@@ -417,12 +448,26 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
     const painel = await painelCarteira(kv);
     const conta = painel.contas[acao.indice];
     if (conta === undefined) return { tela: await montarTela(kv, chatId), aviso: "Conta não localizada." };
-    const bloquear = conta.status !== "bloqueada";
-    await bloquearConta(kv, conta.chatId, bloquear);
+    const desativar = !contaInativa(conta.status);
+    const atualizada = await bloquearConta(kv, conta.chatId, desativar);
+    await registrarAuditoria(kv, {
+      operadorChatId: chatId,
+      acao: desativar ? "desativar_conta" : "ativar_conta",
+      alvoChatId: conta.chatId,
+      motivo: "Ajuste da gerência.",
+      valorAnterior: conta.status,
+      valorNovo: atualizada?.status ?? (desativar ? "desativada" : "ativa"),
+    });
     await gravarUi(kv, chatId, { aba: "ficha", pagina: 0, indice: acao.indice });
     return {
       tela: await montarTela(kv, chatId),
-      aviso: bloquear ? `Conta ${conta.numero} bloqueada.` : `Conta ${conta.numero} desbloqueada.`,
+      aviso: desativar ? `Conta ${conta.numero} desativada.` : `Conta ${conta.numero} ativada.`,
+      avisoCliente: {
+        chatId: conta.chatId,
+        texto: desativar
+          ? "Sua conta LinhaBank foi desativada pela gerência. PIX e depósitos ficam indisponíveis."
+          : "Sua conta LinhaBank foi reativada. Você já pode usar PIX e depósitos.",
+      },
     };
   }
   if (acao.tipo === "cartao") {
@@ -478,6 +523,64 @@ export async function aplicarTextoAdmin(
     return { tela: await montarTela(kv, chatId), aviso: "Texto gravado no rascunho." };
   }
   await garantirConfig(kv);
+  if (ehCampoCliente(campo)) {
+    const ui = await lerUi(kv, chatId);
+    const painel = await painelCarteira(kv);
+    const conta = painel.contas[ui.indice ?? -1];
+    if (conta === undefined) {
+      await kv.delete(CHAVE_PENDENTE(chatId));
+      return { tela: await montarTela(kv, chatId), aviso: "Conta não localizada." };
+    }
+    const patch = patchCadastro(campo, texto);
+    if (patch === undefined) {
+      return {
+        tela: {
+          ...telaPendente(campo, valorCadastro(conta, campo)),
+          aviso: "Valor inválido. Informe novamente.",
+        },
+      };
+    }
+    const resultado = await editarContaAdmin(kv, conta.chatId, patch);
+    if (!resultado.ok) {
+      return {
+        tela: {
+          ...telaPendente(campo, valorCadastro(conta, campo)),
+          aviso: avisoEdicao(resultado.motivo),
+        },
+      };
+    }
+    await kv.delete(CHAVE_PENDENTE(chatId));
+    await gravarUi(kv, chatId, { aba: "ficha", pagina: 0, indice: ui.indice });
+    if (resultado.alterado.length === 0) {
+      return { tela: await montarTela(kv, chatId), aviso: "Cadastro inalterado." };
+    }
+    await registrarAuditoria(kv, {
+      operadorChatId: chatId,
+      acao: "editar_conta",
+      alvoChatId: conta.chatId,
+      motivo: `Campos: ${resultado.alterado.join(", ")}.`,
+      valorAnterior: valorCadastro(conta, campo) ?? "",
+      valorNovo: valorCadastro(
+        {
+          ...conta,
+          nome: resultado.conta.nome,
+          agencia: resultado.conta.agencia,
+          numero: resultado.conta.numero,
+          chaveInterna: resultado.conta.chaveInterna,
+          cartaoFinal: resultado.conta.cartaoFinal,
+        },
+        campo,
+      ) ?? "",
+    });
+    return {
+      tela: await montarTela(kv, chatId),
+      aviso: "Cadastro atualizado.",
+      avisoCliente: {
+        chatId: conta.chatId,
+        texto: "Seus dados da conta LinhaBank foram atualizados pela gerência.",
+      },
+    };
+  }
   if (campo === "lbcoinsAjuste" || campo === "xpAjuste") {
     const ui = await lerUi(kv, chatId);
     const painel = await painelCarteira(kv);
@@ -623,6 +726,22 @@ export function parseAcao(dados: string):
     if (campo === undefined) return undefined;
     return { tipo: "pedir", campo };
   }
+  const cadastro = dados.match(/^a:(en|eg|eu|ek|ef):(\d+)$/);
+  if (cadastro !== null) {
+    const indice = Number(cadastro[2]);
+    if (!Number.isSafeInteger(indice) || indice < 0 || indice > 10_000) return undefined;
+    const campo =
+      cadastro[1] === "en"
+        ? "clienteNome"
+        : cadastro[1] === "eg"
+          ? "clienteAgencia"
+          : cadastro[1] === "eu"
+            ? "clienteNumero"
+            : cadastro[1] === "ek"
+              ? "clienteChave"
+              : "clienteCartao";
+    return { tipo: "pedir", campo, indice };
+  }
   const clubeItem = dados.match(/^a:(ia|ir|lb|xp|rb|lm):(\d+)$/);
   if (clubeItem !== null) {
     const indice = Number(clubeItem[2]);
@@ -677,7 +796,18 @@ function tokenConfere(recebido: string, esperado: string): boolean {
 
 async function lerPendente(kv: HostKvApi, chatId: string): Promise<CampoPendente | undefined> {
   const valor = await kv.get(CHAVE_PENDENTE(chatId));
-  if (valor === "busca" || valor === "lbcoinsAjuste" || valor === "xpAjuste") return valor;
+  if (
+    valor === "busca" ||
+    valor === "lbcoinsAjuste" ||
+    valor === "xpAjuste" ||
+    valor === "clienteNome" ||
+    valor === "clienteAgencia" ||
+    valor === "clienteNumero" ||
+    valor === "clienteChave" ||
+    valor === "clienteCartao"
+  ) {
+    return valor;
+  }
   if (typeof valor !== "string") return undefined;
   return (Object.values(CAMPOS) as string[]).includes(valor) ? (valor as Exclude<CampoPendente, "busca">) : undefined;
 }
@@ -694,7 +824,7 @@ function pedidoDoTexto(campo: Exclude<CampoPendente, "busca">, texto: string, ch
     if (!/^\d{1,7}$/.test(limpo)) return undefined;
     return { [campo]: Number(limpo) };
   }
-  if (campo === "lbcoinsAjuste" || campo === "xpAjuste") return undefined;
+  if (campo === "lbcoinsAjuste" || campo === "xpAjuste" || ehCampoCliente(campo)) return undefined;
   if (campo === "nomeExibido" && limpo.length < 2) return undefined;
   if (campo === "cidadeRecebimento" && limpo.length < 2) return undefined;
   if (campo === "webappUrl" && limpo.length > 0 && !/^https:\/\//i.test(limpo)) return undefined;
@@ -742,8 +872,8 @@ function telaResumo(
   config: ReturnType<typeof configAtual>,
   agendados: number,
 ): TelaAdmin {
-  const ativas = painel.contas.filter((item) => item.status === "ativa").length;
-  const bloqueadas = painel.contas.length - ativas;
+  const ativas = painel.contas.filter((item) => !contaInativa(item.status)).length;
+  const desativadas = painel.contas.length - ativas;
   const cartoes = painel.contas.filter((item) => item.cartaoBloqueado).length;
   const abertas = painel.cobrancas.filter((item) => item.status === "aberta");
   const volume = volumeDoDia(painel.ledger);
@@ -752,7 +882,7 @@ function telaResumo(
     "Gerência",
     "",
     `Saldo das contas: R$ ${reaisDe(painel.totalCentavos)}`,
-    `Contas: ${ativas} ativa(s) · ${bloqueadas} bloqueada(s)`,
+    `Contas: ${ativas} ativa(s) · ${desativadas} desativada(s)`,
     `PIX esperando pagamento: ${abertas.length} · R$ ${reaisDe(somaAbertas(painel))}`,
     `Hoje: + R$ ${reaisDe(volume.credito)}  − R$ ${reaisDe(volume.debito)}`,
     `PIX agendados: ${agendados}`,
@@ -816,7 +946,7 @@ function telaContas(painel: Awaited<ReturnType<typeof painelCarteira>>, pagina: 
     return [
       { text: `Ficha ${conta.numero}`, callback_data: `a:d:${indice}` },
       {
-        text: conta.status === "bloqueada" ? "Desbloquear" : "Bloquear",
+        text: contaInativa(conta.status) ? "Ativar" : "Desativar",
         callback_data: `a:b:${indice}`,
       },
     ];
@@ -860,6 +990,7 @@ async function telaFicha(
     "",
     `Agência ${conta.agencia}  Conta ${conta.numero}`,
     `Titular: ${conta.nome}`,
+    `Telegram: ${conta.chatId}`,
     `Situação: ${rotuloStatus(conta.status)}`,
     `Saldo: R$ ${conta.saldo}`,
     `Chave interna: ${conta.chaveInterna}`,
@@ -874,17 +1005,26 @@ async function telaFicha(
       ...nav("contas"),
       [
         {
-          text: conta.status === "bloqueada" ? "Desbloquear conta" : "Bloquear conta",
+          text: contaInativa(conta.status) ? "Ativar conta" : "Desativar conta",
           callback_data: `a:b:${indice}`,
         },
       ],
       [
+        { text: "Titular", callback_data: `a:en:${indice}` },
+        { text: "Agência", callback_data: `a:eg:${indice}` },
+      ],
+      [
+        { text: "Número", callback_data: `a:eu:${indice}` },
+        { text: "Chave", callback_data: `a:ek:${indice}` },
+      ],
+      [
+        { text: "Final cartão", callback_data: `a:ef:${indice}` },
         {
           text: conta.cartaoBloqueado ? "Liberar cartão" : "Bloquear cartão",
           callback_data: `a:j:${indice}`,
         },
-        { text: "Extrato", callback_data: `a:e:${indice}` },
       ],
+      [{ text: "Extrato", callback_data: `a:e:${indice}` }],
       [
         { text: "LBcoins ±", callback_data: `a:lb:${indice}` },
         { text: "XP ±", callback_data: `a:xp:${indice}` },
@@ -1070,7 +1210,7 @@ function telaMais(config: ReturnType<typeof configAtual>): TelaAdmin {
   };
 }
 
-function telaPendente(campo: CampoPendente): TelaAdmin {
+function telaPendente(campo: CampoPendente, valorHoje?: string): TelaAdmin {
   if (campo === "busca") {
     return {
       texto: [
@@ -1080,8 +1220,7 @@ function telaPendente(campo: CampoPendente): TelaAdmin {
       teclado: [[{ text: "Cancelar", callback_data: "a:z" }]],
     };
   }
-  const atual = configAtual();
-  const valor = valorCampo(campo, atual);
+  const valor = valorHoje ?? valorCampo(campo, configAtual());
   return {
     texto: [
       `Alterar ${ROTULO_CAMPO[campo]}`,
@@ -1155,7 +1294,7 @@ function rotuloTipo(tipo: string): string {
 }
 
 function rotuloStatus(status: string): string {
-  return status === "bloqueada" ? "bloqueada" : "ativa";
+  return contaInativa(status) ? "desativada" : "ativa";
 }
 
 function rotuloCobranca(status: string): string {
@@ -1218,8 +1357,52 @@ async function lerTaxasGateway(kv: HostKvApi): Promise<(TaxasPsp & { em?: string
 
 function valorCampo(campo: Exclude<CampoPendente, "busca">, atual: ReturnType<typeof configAtual>): string {
   if (campo === "taxaCentavos" || campo === "limiteCentavos") return `R$ ${reaisDe(atual[campo])}`;
-  if (campo === "lbcoinsAjuste" || campo === "xpAjuste") return "";
-  return String(atual[campo] ?? "");
+  if (campo === "lbcoinsAjuste" || campo === "xpAjuste" || ehCampoCliente(campo)) return "";
+  return String(atual[campo as keyof typeof atual] ?? "");
+}
+
+function ehCampoCliente(
+  campo: CampoPendente,
+): campo is "clienteNome" | "clienteAgencia" | "clienteNumero" | "clienteChave" | "clienteCartao" {
+  return CAMPOS_CLIENTE.includes(campo);
+}
+
+function patchCadastro(campo: CampoPendente, texto: string): PatchContaAdmin | undefined {
+  const limpo = texto.trim();
+  if (limpo.length === 0) return undefined;
+  if (campo === "clienteNome") return { nome: limpo };
+  if (campo === "clienteAgencia") return { agencia: limpo };
+  if (campo === "clienteNumero") return { numero: limpo };
+  if (campo === "clienteChave") return { chaveInterna: limpo };
+  if (campo === "clienteCartao") return { cartaoFinal: limpo };
+  return undefined;
+}
+
+function valorCadastro(conta: ContaPainel | undefined, campo: CampoPendente): string | undefined {
+  if (conta === undefined) return undefined;
+  if (campo === "clienteNome") return conta.nome;
+  if (campo === "clienteAgencia") return conta.agencia;
+  if (campo === "clienteNumero") return conta.numero;
+  if (campo === "clienteChave") return conta.chaveInterna;
+  if (campo === "clienteCartao") return conta.cartaoFinal;
+  return undefined;
+}
+
+async function valorAtualCadastro(
+  kv: HostKvApi,
+  campo: CampoPendente,
+  indice: number | undefined,
+): Promise<string | undefined> {
+  if (!ehCampoCliente(campo) || indice === undefined) return undefined;
+  const painel = await painelCarteira(kv);
+  return valorCadastro(painel.contas[indice], campo);
+}
+
+function avisoEdicao(motivo: "sem_conta" | "valor_invalido" | "numero_em_uso" | "chave_em_uso"): string {
+  if (motivo === "numero_em_uso") return "Este número de conta já está em uso.";
+  if (motivo === "chave_em_uso") return "Esta chave interna já está em uso.";
+  if (motivo === "sem_conta") return "Conta não localizada.";
+  return "Valor inválido. Informe novamente.";
 }
 
 function parseAjusteQuantidade(texto: string): { quantidade: number; motivo: string } | undefined {

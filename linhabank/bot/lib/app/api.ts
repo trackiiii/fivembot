@@ -141,7 +141,7 @@ function mensagemDe(acao: AcaoApp, resultado: ResultadoOperacao): string | undef
   if (acao === "enviar" && resultado.ok) {
     return resultado.interno ? "PIX enviado para conta LinhaBank. Sem taxa." : "PIX enviado.";
   }
-  if (resultado.motivo === "conta_bloqueada") return "Esta conta está bloqueada.";
+  if (resultado.motivo === "conta_bloqueada") return "Esta conta está desativada.";
   if (resultado.motivo === "valor_invalido") return "Esse valor não deu certo. Tenta de novo, tipo 50,00.";
   if (resultado.motivo === "destino_invalido" || resultado.motivo === "chave_ausente") return "Essa chave não deu certo.";
   if (resultado.motivo === "saldo_insuficiente") return "Saldo insuficiente. O valor não saiu.";

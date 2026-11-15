@@ -27,6 +27,8 @@ import {
   lerContaSql,
   lerCobrancaSql,
   lerCobrancaTxidSql,
+  chatIdPorChaveInternaSql,
+  chatIdPorNumeroSql,
   listarCobrancasSql,
   listarChatIdsSql,
   listarContasSql,
@@ -38,6 +40,14 @@ import { depositoComTaxa, taxaPixExternoCentavos, taxaPixExternoRecebimentoCenta
 
 export const TERMOS_VERSAO = "2026-11-15-2";
 export const AGENCIA = "0001";
+
+export function contaInativa(status: string | undefined): boolean {
+  return status === "bloqueada" || status === "desativada";
+}
+
+export function statusDaConta(valor: unknown): "ativa" | "desativada" {
+  return valor === "bloqueada" || valor === "desativada" ? "desativada" : "ativa";
+}
 
 export type TipoMovimento =
   | "pix_enviado"
@@ -92,10 +102,23 @@ export type Conta = {
   saldoCentavos: number;
   cartaoFinal: string;
   cartaoBloqueado: boolean;
-  status: "ativa" | "bloqueada";
+  status: "ativa" | "desativada";
   versao: number;
   extrato: Movimento[];
 };
+
+export type PatchContaAdmin = {
+  nome?: string;
+  agencia?: string;
+  numero?: string;
+  chaveInterna?: string;
+  cartaoFinal?: string;
+  status?: "ativa" | "desativada";
+};
+
+export type ResultadoEdicaoConta =
+  | { ok: true; conta: Conta; alterado: (keyof PatchContaAdmin)[] }
+  | { ok: false; motivo: "sem_conta" | "valor_invalido" | "numero_em_uso" | "chave_em_uso" };
 
 export type ResumoConta = {
   aberta: boolean;
@@ -302,26 +325,41 @@ export function lerContaGravada(valor: JsonValue | undefined): Conta | undefined
     nome: item.nome,
     termosVersao: typeof item.termosVersao === "string" ? item.termosVersao : TERMOS_VERSAO,
     aceitouEm: typeof item.aceitouEm === "string" ? item.aceitouEm : "",
-    agencia: AGENCIA,
+    agencia: agenciaDaConta(item.agencia),
     numero: item.numero,
     chaveInterna: chave,
     referencia: typeof item.referencia === "string" ? item.referencia : "",
     saldoCentavos: saldo,
     cartaoFinal: item.cartaoFinal,
     cartaoBloqueado: item.cartaoBloqueado,
-    status: item.status === "bloqueada" ? "bloqueada" : "ativa",
+    status: statusDaConta(item.status),
     versao: typeof item.versao === "number" && Number.isSafeInteger(item.versao) ? item.versao : 1,
     extrato,
   };
 }
 
-async function gravarConta(kv: HostKvApi, conta: Conta): Promise<void> {
+async function gravarConta(
+  kv: HostKvApi,
+  conta: Conta,
+  anterior?: { numero: string; chaveInterna: string },
+): Promise<void> {
+  if (anterior !== undefined && anterior.numero !== conta.numero) {
+    await soltarIndice(kv, chaveContaNumero(anterior.numero), conta.chatId);
+  }
+  if (anterior !== undefined && anterior.chaveInterna !== conta.chaveInterna) {
+    await soltarIndice(kv, chaveContaInterna(anterior.chaveInterna), conta.chatId);
+  }
   await kv.put(chaveContaChat(conta.chatId), conta);
   await kv.put(chaveContaNumero(conta.numero), conta.chatId);
   await kv.put(chaveContaInterna(conta.chaveInterna), conta.chatId);
   await kv.put(chaveContaReferencia(conta.referencia), conta.chatId);
   await registrarIndiceConta(kv, conta.chatId);
   if (sqlDisponivel()) await upsertContaSql(conta);
+}
+
+async function soltarIndice(kv: HostKvApi, chave: string, chatId: string): Promise<void> {
+  const dono = await kv.get(chave);
+  if (dono === chatId) await kv.delete(chave);
 }
 
 export async function lerConta(kv: HostKvApi, chatId: string): Promise<Conta | undefined> {
@@ -482,7 +520,7 @@ export async function operarConta(
   const conta = await lerConta(kv, chatId);
   if (conta === undefined) return { ok: false, motivo: "sem_conta" };
 
-  if (conta.status === "bloqueada" && pedido.acao !== "resumo" && pedido.acao !== "extrato" && pedido.acao !== "consultar_chave") {
+  if (contaInativa(conta.status) && pedido.acao !== "resumo" && pedido.acao !== "extrato" && pedido.acao !== "consultar_chave") {
     return { ok: false, motivo: "conta_bloqueada", saldo: reaisDe(conta.saldoCentavos), conta: perfil(conta) };
   }
 
@@ -561,7 +599,9 @@ function primeiroNome(nome: string): string {
 
 export async function buscarContaLinhaBank(kv: HostKvApi, chave: string): Promise<Conta | undefined> {
   const destino = chave.trim().toLowerCase();
-  if (/^lb\d{8}@linhabank$/.test(destino)) return contaPorChat(kv, chaveContaInterna(destino));
+  if (destino.length === 0) return undefined;
+  const porChave = await contaPorChat(kv, chaveContaInterna(destino));
+  if (porChave !== undefined) return porChave;
   if (/^\d{8}$/.test(destino)) return contaPorChat(kv, chaveContaNumero(destino));
   return undefined;
 }
@@ -1057,11 +1097,138 @@ export async function bloquearConta(
   chatId: string,
   bloquear: boolean,
 ): Promise<Conta | undefined> {
+  const resultado = await editarContaAdmin(kv, chatId, { status: bloquear ? "desativada" : "ativa" });
+  if (resultado.ok) return resultado.conta;
+  return lerConta(kv, chatId);
+}
+
+export async function editarContaAdmin(
+  kv: HostKvApi,
+  chatId: string,
+  patch: PatchContaAdmin,
+): Promise<ResultadoEdicaoConta> {
   const conta = await lerConta(kv, chatId);
-  if (conta === undefined) return undefined;
-  conta.status = bloquear ? "bloqueada" : "ativa";
-  await gravarConta(kv, conta);
-  return conta;
+  if (conta === undefined) return { ok: false, motivo: "sem_conta" };
+  const anterior = { numero: conta.numero, chaveInterna: conta.chaveInterna };
+  const proxima: Conta = { ...conta, extrato: [...conta.extrato] };
+  const alterado: (keyof PatchContaAdmin)[] = [];
+
+  if (patch.nome !== undefined) {
+    const nome = normalizarNomeTitular(patch.nome);
+    if (nome === undefined) return { ok: false, motivo: "valor_invalido" };
+    if (nome !== proxima.nome) {
+      proxima.nome = nome;
+      alterado.push("nome");
+    }
+  }
+  if (patch.agencia !== undefined) {
+    const agencia = normalizarAgencia(patch.agencia);
+    if (agencia === undefined) return { ok: false, motivo: "valor_invalido" };
+    if (agencia !== proxima.agencia) {
+      proxima.agencia = agencia;
+      alterado.push("agencia");
+    }
+  }
+  if (patch.numero !== undefined) {
+    const numero = normalizarNumeroConta(patch.numero);
+    if (numero === undefined) return { ok: false, motivo: "valor_invalido" };
+    if (numero !== proxima.numero) {
+      const ocupante = await chatIdDoNumero(kv, numero);
+      if (ocupante !== undefined && ocupante !== chatId) return { ok: false, motivo: "numero_em_uso" };
+      if (proxima.chaveInterna === `lb${proxima.numero}@linhabank` && patch.chaveInterna === undefined) {
+        const novaChave = `lb${numero}@linhabank`;
+        const donoChave = await chatIdDaChaveInterna(kv, novaChave);
+        if (donoChave !== undefined && donoChave !== chatId) return { ok: false, motivo: "chave_em_uso" };
+        proxima.chaveInterna = novaChave;
+        alterado.push("chaveInterna");
+      }
+      proxima.numero = numero;
+      alterado.push("numero");
+    }
+  }
+  if (patch.chaveInterna !== undefined) {
+    const chave = normalizarChaveInterna(patch.chaveInterna);
+    if (chave === undefined) return { ok: false, motivo: "valor_invalido" };
+    if (chave !== proxima.chaveInterna) {
+      const ocupante = await chatIdDaChaveInterna(kv, chave);
+      if (ocupante !== undefined && ocupante !== chatId) return { ok: false, motivo: "chave_em_uso" };
+      proxima.chaveInterna = chave;
+      if (!alterado.includes("chaveInterna")) alterado.push("chaveInterna");
+    }
+  }
+  if (patch.cartaoFinal !== undefined) {
+    const final = normalizarCartaoFinal(patch.cartaoFinal);
+    if (final === undefined) return { ok: false, motivo: "valor_invalido" };
+    if (final !== proxima.cartaoFinal) {
+      proxima.cartaoFinal = final;
+      alterado.push("cartaoFinal");
+    }
+  }
+  if (patch.status !== undefined) {
+    const status = statusDaConta(patch.status);
+    if (status !== proxima.status) {
+      proxima.status = status;
+      alterado.push("status");
+    }
+  }
+
+  if (alterado.length > 0) {
+    proxima.versao += 1;
+    await gravarConta(kv, proxima, anterior);
+  }
+  return { ok: true, conta: proxima, alterado };
+}
+
+async function chatIdDoNumero(kv: HostKvApi, numero: string): Promise<string | undefined> {
+  if (sqlDisponivel()) {
+    const id = await chatIdPorNumeroSql(numero);
+    if (id !== undefined) return id;
+  }
+  const valor = await kv.get(chaveContaNumero(numero));
+  return typeof valor === "string" ? valor : undefined;
+}
+
+async function chatIdDaChaveInterna(kv: HostKvApi, chave: string): Promise<string | undefined> {
+  if (sqlDisponivel()) {
+    const id = await chatIdPorChaveInternaSql(chave);
+    if (id !== undefined) return id;
+  }
+  const valor = await kv.get(chaveContaInterna(chave));
+  return typeof valor === "string" ? valor : undefined;
+}
+
+function agenciaDaConta(valor: unknown): string {
+  return typeof valor === "string" ? (normalizarAgencia(valor) ?? AGENCIA) : AGENCIA;
+}
+
+function normalizarNomeTitular(valor: string): string | undefined {
+  const nome = valor.trim().replace(/\s+/g, " ");
+  if (nome.length < 2 || nome.length > 64) return undefined;
+  if (/[\u0000-\u001f]/.test(nome)) return undefined;
+  return nome;
+}
+
+function normalizarAgencia(valor: string): string | undefined {
+  const digitos = valor.trim().replace(/\D/g, "");
+  if (digitos.length < 1 || digitos.length > 4) return undefined;
+  return digitos.padStart(4, "0");
+}
+
+function normalizarNumeroConta(valor: string): string | undefined {
+  const digitos = valor.trim().replace(/\D/g, "");
+  return /^\d{8}$/.test(digitos) ? digitos : undefined;
+}
+
+function normalizarChaveInterna(valor: string): string | undefined {
+  const chave = valor.trim().toLowerCase();
+  if (chave.length < 8 || chave.length > 77) return undefined;
+  if (/\s/.test(chave)) return undefined;
+  return chave;
+}
+
+function normalizarCartaoFinal(valor: string): string | undefined {
+  const digitos = valor.trim().replace(/\D/g, "");
+  return /^\d{4}$/.test(digitos) ? digitos : undefined;
 }
 
 export async function bloquearCartaoGerencia(
@@ -1157,9 +1324,12 @@ export async function painelCarteira(kv: HostKvApi): Promise<{
   };
 }
 
-export async function listarChatIdsClientes(kv: HostKvApi): Promise<string[]> {
-  if (sqlDisponivel()) return listarChatIdsSql();
-  return listarChatIds(kv);
+export async function listarChatIdsClientes(kv: HostKvApi, soAtivas = false): Promise<string[]> {
+  if (!soAtivas) {
+    return sqlDisponivel() ? listarChatIdsSql() : listarChatIds(kv);
+  }
+  const painel = await painelCarteira(kv);
+  return painel.contas.filter((item) => !contaInativa(item.status)).map((item) => item.chatId);
 }
 
 export async function confirmarCobrancaSandbox(
