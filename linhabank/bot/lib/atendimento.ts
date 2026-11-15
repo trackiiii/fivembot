@@ -87,7 +87,7 @@ export type Atualizacao =
       updateId: number;
       callbackId: string;
       dados: string;
-      decisao: "concordo" | "recuso" | "admin" | "clube" | "cofrinho" | "ignorar";
+      decisao: "concordo" | "recuso" | "admin" | "clube" | "cofrinho" | "uso" | "ignorar";
     };
 
 export type TecladoInline = { text: string; callback_data: string }[][];
@@ -240,9 +240,11 @@ export function interpretarAtualizacao(corpo: unknown): Atualizacao {
             ? "admin"
             : data.startsWith("c:")
               ? "clube"
-              : data.startsWith("k:")
+              :       data.startsWith("k:")
                 ? "cofrinho"
-                : "ignorar";
+                : data.startsWith("u:")
+                  ? "uso"
+                  : "ignorar";
     return {
       tipo: "callback",
       chatId: String(chat.id),
@@ -513,13 +515,19 @@ async function enviarVoz(
   }
 }
 
-export async function enviarFoto(chatId: string, png: Uint8Array, caption: string): Promise<boolean> {
+export async function enviarFoto(
+  chatId: string,
+  png: Uint8Array,
+  caption: string,
+  opcoes: { prefixo?: boolean } = {},
+): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (token === undefined || token.length === 0) return false;
   try {
     const form = new FormData();
     form.set("chat_id", chatId);
-    const captionHtml = comParseHtml(comVozThialinha(caption).slice(0, 1024), true);
+    const prefixo = opcoes.prefixo !== false;
+    const captionHtml = comParseHtml((prefixo ? comVozThialinha(caption) : caption).slice(0, 1024), prefixo);
     form.set("caption", captionHtml.text);
     if (captionHtml.parse_mode !== undefined) form.set("parse_mode", captionHtml.parse_mode);
     form.set("photo", new Blob([Buffer.from(png)], { type: "image/png" }), "pix.png");
@@ -624,6 +632,8 @@ const COMANDOS_CLIENTE = [
   { command: "depositar", description: "Gerar QR Code para depósito PIX" },
   { command: "club", description: "Abrir o LINHABANK CLUB" },
   { command: "cofrinho", description: "Guardar e resgatar no cofrinho" },
+  { command: "menu", description: "Operar pelos botões" },
+  { command: "conversa", description: "Falar com a Thialinha" },
 ];
 
 export async function configurarPerfil(): Promise<boolean> {
@@ -635,7 +645,7 @@ export async function configurarPerfil(): Promise<boolean> {
   });
   await chamarTelegram("setMyDescription", {
     description:
-      "A Thialinha cuida da sua conta no LinhaBank neste chat: saldo, PIX, cofrinho, agendamento e o Club. O app abre no botão LinhaBank ao lado da mensagem.",
+      "A Thialinha cuida da sua conta no LinhaBank neste chat: saldo, PIX, cofrinho, agendamento e o Club. Você escolhe falar com ela ou usar o menu. O app abre no botão LinhaBank ao lado da mensagem.",
   });
   await chamarTelegram("setMyCommands", { commands: comandos });
   await configurarMenuApp();

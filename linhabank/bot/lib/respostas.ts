@@ -1,7 +1,7 @@
 import { dataHoraBrasil } from "./horario.js";
 
 export const RESPOSTA_AJUDA =
-  "Tô aqui. Posso ver o saldo, gerar um PIX pra receber, mandar um, guardar no cofrinho, agendar um envio ou abrir o Club. Me fala o que você precisa.";
+  "Tô aqui. Posso ver o saldo, gerar um PIX pra receber, mandar um, guardar no cofrinho, agendar um envio ou abrir o Club. Me fala o que você precisa. Se preferir clicar, manda /menu.";
 
 export type ItemExtrato = {
   em: string;

@@ -8,6 +8,13 @@ import { tratarCallbackAdmin, tratarMidiaAdmin, tratarSemTextoAdmin, tratarTexto
 import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } from "../lib/banco.js";
 import { abrirClube, comandoClube, tratarCallbackClube } from "../lib/clube/telegram.js";
 import { abrirCofrinho, comandoCofrinho, tratarCallbackCofrinho, tratarTextoCofrinho } from "../lib/cofrinho/telegram.js";
+import {
+  enviarEscolhaUso,
+  precisaEscolherUso,
+  tecladoTrocarMenu,
+  tratarCallbackUso,
+  tratarTextoUso,
+} from "../lib/uso/telegram.js";
 import { aoAbrirContaFidelidade, capturarStartIndicacao, payloadStart } from "../lib/fidelidade/index.js";
 import { garantirConfig } from "../lib/config.js";
 import { responderManutencao } from "../lib/manutencao.js";
@@ -174,6 +181,10 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
       await tratarCallbackCofrinho(deps.kv, atualizacao);
       return;
     }
+    if (atualizacao.decisao === "uso") {
+      await tratarCallbackUso(deps.kv, atualizacao);
+      return;
+    }
     await responderCallback(atualizacao.callbackId);
     if (atualizacao.decisao === "ignorar") return;
     if (atualizacao.decisao === "recuso") {
@@ -185,7 +196,8 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     const jaTinha = (await lerConta(deps.kv, atualizacao.chatId)) !== undefined;
     await aceitarTermos(deps.kv, atualizacao.chatId, atualizacao.nome);
     if (jaTinha) {
-      await enviarPadrao(deps.kv, atualizacao, RESPOSTA_AJUDA);
+      await enviarPadrao(deps.kv, atualizacao, RESPOSTA_AJUDA, { teclado: tecladoTrocarMenu() });
+      if (await precisaEscolherUso(deps.kv, atualizacao.chatId)) await enviarEscolhaUso(atualizacao.chatId);
       return;
     }
     const clube = await aoAbrirContaFidelidade(deps.kv, atualizacao.chatId);
@@ -193,6 +205,7 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     if (clube.avisoIndicador !== undefined) {
       await enviarTexto(clube.avisoIndicador.chatId, clube.avisoIndicador.texto);
     }
+    await enviarEscolhaUso(atualizacao.chatId);
     return;
   }
 
@@ -204,14 +217,6 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
   }
   const decisao = decidirTermos(atualizacao.texto);
   const existente = await lerConta(deps.kv, atualizacao.chatId);
-  if (comandoClube(atualizacao.texto)) {
-    await abrirClube(deps.kv, atualizacao.chatId, atualizacao.mensagemId);
-    return;
-  }
-  if (comandoCofrinho(atualizacao.texto)) {
-    await abrirCofrinho(deps.kv, atualizacao.chatId, atualizacao.mensagemId);
-    return;
-  }
   if (
     await tratarTextoCofrinho(
       deps.kv,
@@ -221,6 +226,28 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
       `cof:${atualizacao.updateId}`,
     )
   ) {
+    return;
+  }
+  const uso = await tratarTextoUso(
+    deps.kv,
+    atualizacao.chatId,
+    atualizacao.texto,
+    atualizacao.mensagemId,
+    `uso:${atualizacao.updateId}`,
+  );
+  if (uso === "menu" || uso === "escolha") return;
+  if (uso === "dialogo") {
+    await enviarPadrao(deps.kv, atualizacao, "Combinado. Pode escrever. Se quiser os botões de novo, manda /menu.", {
+      teclado: tecladoTrocarMenu(),
+    });
+    return;
+  }
+  if (comandoClube(atualizacao.texto)) {
+    await abrirClube(deps.kv, atualizacao.chatId, atualizacao.mensagemId);
+    return;
+  }
+  if (comandoCofrinho(atualizacao.texto)) {
+    await abrirCofrinho(deps.kv, atualizacao.chatId, atualizacao.mensagemId);
     return;
   }
   if (comandoAgendamentos(atualizacao.texto)) {
@@ -245,7 +272,7 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     const texto = comando(atualizacao.texto, "start")
       ? await textoStartConta(deps.kv, atualizacao)
       : RESPOSTA_AJUDA;
-    await enviarPadrao(deps.kv, atualizacao, texto);
+    await enviarPadrao(deps.kv, atualizacao, texto, comando(atualizacao.texto, "start") ? {} : { teclado: tecladoTrocarMenu() });
     return;
   }
   const abriuAgora = existente === undefined && decisao === "concordo";
@@ -256,6 +283,7 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     if (clube.avisoIndicador !== undefined) {
       await enviarTexto(clube.avisoIndicador.chatId, clube.avisoIndicador.texto);
     }
+    await enviarEscolhaUso(atualizacao.chatId);
     return;
   }
   const memoria = await lerMemoria(deps.kv, atualizacao.chatId);
@@ -390,8 +418,16 @@ async function textoContaAberta(kv: HostKvApi, atualizacao: MensagemRecebida): P
   });
 }
 
-async function enviarPadrao(kv: HostKvApi, atualizacao: MensagemRecebida, texto: string): Promise<void> {
-  const ok = await enviarTexto(atualizacao.chatId, texto, atualizacao.mensagemId);
+async function enviarPadrao(
+  kv: HostKvApi,
+  atualizacao: MensagemRecebida,
+  texto: string,
+  extra: { teclado?: { text: string; callback_data: string }[][] } = {},
+): Promise<void> {
+  const ok = await enviarTexto(atualizacao.chatId, texto, {
+    replyTo: atualizacao.mensagemId,
+    ...(extra.teclado !== undefined ? { teclado: extra.teclado } : {}),
+  });
   if (!ok) return;
   await registrarTroca(kv, atualizacao.chatId, atualizacao.nome, atualizacao.tipo === "texto" ? atualizacao.texto : "CONCORDO", texto, "padrao");
 }

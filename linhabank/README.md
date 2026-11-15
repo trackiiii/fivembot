@@ -18,7 +18,8 @@ Este projeto **não está em produção**. O Asaas pode estar ligado para PIX, m
 - Cada depósito, envio e recebimento de qualquer cliente é publicado no canal de movimento do Telegram (`LINHABANK_CANAL_MOVIMENTO` ou, se vazio, nos chats dos operadores). Sem copia e cola e sem a Thialinha.
 - Foto de comprovante **não** credita saldo.
 - A Thialinha tem uma biblioteca de conversa local (saudação, saldo, depósito, FAQ, Club). Isso não chama o modelo. PIX de envio e falas complexas continuam no turno do modelo.
-- LINHABANK CLUB (`/club`): LBcoins, categorias Bronze/Prata/Ouro por XP e programa INDIQUE E GANHE. LBcoins não são dinheiro, Pix nem saldo sacável. Indicação só credita depois da aprovação (padrão: análise da gerência). O teclado do Club só aparece quando o cliente abre `/club`.
+- LINHABANK CLUB (`/club`): LBcoins, categorias Bronze/Prata/Ouro por XP e programa INDIQUE E GANHE. LBcoins não são dinheiro, Pix nem saldo sacável. Indicação só credita depois da aprovação (padrão: análise da gerência). O teclado do Club só aparece quando o cliente abre `/club`, ou pela opção Club no menu.
+- Depois de abrir a conta, o cliente escolhe falar com a Thialinha ou operar pelo menu de botões. `/menu` e `/conversa` trocam. O menu tem uma opção por linha, com Voltar. PIX de envio pede confirmação.
 - Mini-app do Telegram em `/v1/channels/app/`. Saldo, depósito PIX, envio com confirmação e extrato da mesma conta. O botão nativo **LinhaBank** só aparece com `TELEGRAM_WEBAPP_URL` em HTTPS.
 
 ## O que ainda não está pronto para dinheiro real
@@ -77,7 +78,7 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | `LINHABANK_BENEFICIO_OURO` | Texto extra de benefício do Ouro. Vazio = só o que já existe |
 | `LINHABANK_VOZ` | `0` desliga a nota de voz da Thialinha. Padrão: ligada. A voz humana é a neural pt-BR Francisca: `python3 -m pip install edge-tts` e `ffmpeg`. A frase falada segue para `speech.platform.bing.com`. Sem isso, cai no Mbrola/`espeak-ng` |
 
-Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia; com código: registra indicação), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`, `/cofrinho`, `/club`. As falas da Thialinha no chat começam com o nome em negrito. O admin abre `/admin` no mesmo chat, com botões. No Clube, a gerência aprova indicações, ajusta LBcoins/XP com justificativa e configura recompensa e faixas de XP.
+Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia; com código: registra indicação), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`, `/cofrinho`, `/club`, `/menu`, `/conversa`. As falas da Thialinha no chat começam com o nome em negrito. O menu de botões não usa esse prefixo. O admin abre `/admin` no mesmo chat, com botões. No Clube, a gerência aprova indicações, ajusta LBcoins/XP com justificativa e configura recompensa e faixas de XP.
 
 ## Webhooks
 

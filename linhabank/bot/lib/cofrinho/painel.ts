@@ -1,6 +1,7 @@
 import type { HostKvApi } from "@grok/agent-sdk";
 
 import { lerConta, reaisDe } from "../banco.js";
+import { voltarMenuSePrecisar } from "../uso/painel.js";
 import { lerCofrinho, listarCofrinhos } from "./store.js";
 import { linhaPote, progresso, totalGuardadoConta } from "./servico.js";
 import type { Cofrinho } from "./tipos.js";
@@ -79,6 +80,7 @@ async function telaHome(kv: HostKvApi, chatId: string): Promise<TelaCofrinho> {
     teclado: [
       ...itens.map((item) => [{ text: item.nome, callback_data: `k:o:${item.id}` }]),
       [{ text: "Novo cofrinho", callback_data: "k:n" }],
+      ...(await voltarMenuSePrecisar(kv, chatId)),
     ],
   };
 }

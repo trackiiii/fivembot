@@ -11,6 +11,7 @@ import {
   type ResumoClube,
 } from "../fidelidade/index.js";
 import { configAtual } from "../config.js";
+import { voltarMenuSePrecisar } from "../uso/painel.js";
 
 export type BotaoClube = { text: string; callback_data: string };
 
@@ -21,7 +22,7 @@ export type TelaClube = {
 
 export type AbaClube = "home" | "categoria" | "saldo" | "indicar" | "indicacoes" | "historico" | "como" | "beneficios";
 
-function nav(aba: AbaClube): BotaoClube[][] {
+function nav(aba: AbaClube, extra: BotaoClube[][] = []): BotaoClube[][] {
   const marca = (id: AbaClube, rotulo: string, dados: string): BotaoClube => ({
     text: aba === id ? `• ${rotulo}` : rotulo,
     callback_data: dados,
@@ -31,6 +32,7 @@ function nav(aba: AbaClube): BotaoClube[][] {
     [marca("indicacoes", "Indicações", "c:m"), marca("historico", "Histórico", "c:r")],
     [marca("como", "Como ganhar", "c:g"), marca("beneficios", "Benefícios", "c:b")],
     [{ text: "Club", callback_data: "c:h" }],
+    ...extra,
   ];
 }
 
@@ -49,17 +51,18 @@ export function parseAcaoClube(dados: string): AbaClube | undefined {
 export async function montarClube(kv: HostKvApi, chatId: string, aba: AbaClube = "home"): Promise<TelaClube | undefined> {
   const resumo = await consultarClube(kv, chatId);
   if (resumo === undefined) return undefined;
-  if (aba === "categoria") return telaCategoria(kv, chatId, resumo);
-  if (aba === "saldo") return telaSaldo(kv, chatId, resumo);
-  if (aba === "indicar") return telaIndicar(resumo);
-  if (aba === "indicacoes") return telaIndicacoes(kv, chatId, resumo);
-  if (aba === "historico") return telaHistorico(kv, chatId, resumo);
-  if (aba === "como") return telaComo(resumo);
-  if (aba === "beneficios") return telaBeneficios(resumo);
-  return telaHome(resumo);
+  const extra = await voltarMenuSePrecisar(kv, chatId);
+  if (aba === "categoria") return telaCategoria(kv, chatId, resumo, extra);
+  if (aba === "saldo") return telaSaldo(kv, chatId, resumo, extra);
+  if (aba === "indicar") return telaIndicar(resumo, extra);
+  if (aba === "indicacoes") return telaIndicacoes(kv, chatId, resumo, extra);
+  if (aba === "historico") return telaHistorico(kv, chatId, resumo, extra);
+  if (aba === "como") return telaComo(resumo, extra);
+  if (aba === "beneficios") return telaBeneficios(resumo, extra);
+  return telaHome(resumo, extra);
 }
 
-function telaHome(resumo: ResumoClube): TelaClube {
+function telaHome(resumo: ResumoClube, extra: BotaoClube[][] = []): TelaClube {
   return {
     texto: [
       "⭐ LINHABANK CLUB",
@@ -70,11 +73,16 @@ function telaHome(resumo: ResumoClube): TelaClube {
       "",
       "LBcoins são pontos de fidelidade. Não são saldo, Pix nem dinheiro sacável.",
     ].join("\n"),
-    teclado: nav("home"),
+    teclado: nav("home", extra),
   };
 }
 
-async function telaCategoria(kv: HostKvApi, chatId: string, resumo: ResumoClube): Promise<TelaClube> {
+async function telaCategoria(
+  kv: HostKvApi,
+  chatId: string,
+  resumo: ResumoClube,
+  extra: BotaoClube[][] = [],
+): Promise<TelaClube> {
   const cfg = configAtual();
   const falta = faltaPara(resumo.xp, resumo.categoria, cfg.xpPrata, cfg.xpOuro);
   const historico = await historicoCategoria(kv, chatId);
@@ -94,11 +102,16 @@ async function telaCategoria(kv: HostKvApi, chatId: string, resumo: ResumoClube)
       "EVOLUÇÃO",
       ...linhas,
     ].join("\n"),
-    teclado: nav("categoria"),
+    teclado: nav("categoria", extra),
   };
 }
 
-async function telaSaldo(kv: HostKvApi, chatId: string, resumo: ResumoClube): Promise<TelaClube> {
+async function telaSaldo(
+  kv: HostKvApi,
+  chatId: string,
+  resumo: ResumoClube,
+  extra: BotaoClube[][] = [],
+): Promise<TelaClube> {
   const hist = await historicoRecompensas(kv, chatId, 5);
   const linhas =
     hist.length === 0
@@ -115,11 +128,11 @@ async function telaSaldo(kv: HostKvApi, chatId: string, resumo: ResumoClube): Pr
       "",
       ...linhas,
     ].join("\n"),
-    teclado: nav("saldo"),
+    teclado: nav("saldo", extra),
   };
 }
 
-function telaIndicar(resumo: ResumoClube): TelaClube {
+function telaIndicar(resumo: ResumoClube, extra: BotaoClube[][] = []): TelaClube {
   const cfg = configAtual();
   const criterio = cfg.indicacaoCriterio === "conta_aberta" ? "quando a pessoa abrir a conta neste chat" : "depois da análise da gerência";
   return {
@@ -134,11 +147,16 @@ function telaIndicar(resumo: ResumoClube): TelaClube {
       "",
       "Você não pode indicar a si mesmo. Cada pessoa só pode ser indicada uma vez.",
     ].join("\n"),
-    teclado: nav("indicar"),
+    teclado: nav("indicar", extra),
   };
 }
 
-async function telaIndicacoes(kv: HostKvApi, chatId: string, resumo: ResumoClube): Promise<TelaClube> {
+async function telaIndicacoes(
+  kv: HostKvApi,
+  chatId: string,
+  resumo: ResumoClube,
+  extra: BotaoClube[][] = [],
+): Promise<TelaClube> {
   const lista = await indicacoesDe(kv, chatId);
   const linhas =
     lista.length === 0
@@ -154,11 +172,16 @@ async function telaIndicacoes(kv: HostKvApi, chatId: string, resumo: ResumoClube
       "",
       ...linhas,
     ].join("\n"),
-    teclado: nav("indicacoes"),
+    teclado: nav("indicacoes", extra),
   };
 }
 
-async function telaHistorico(kv: HostKvApi, chatId: string, resumo: ResumoClube): Promise<TelaClube> {
+async function telaHistorico(
+  kv: HostKvApi,
+  chatId: string,
+  resumo: ResumoClube,
+  extra: BotaoClube[][] = [],
+): Promise<TelaClube> {
   const hist = await historicoRecompensas(kv, chatId, 10);
   const linhas =
     hist.length === 0
@@ -166,11 +189,11 @@ async function telaHistorico(kv: HostKvApi, chatId: string, resumo: ResumoClube)
       : hist.map((item) => `${formatarQuando(item.em)}  +${item.quantidade} ${item.tipo} · ${item.descricao}`);
   return {
     texto: ["Histórico de recompensas", "", `Saldo atual: ${resumo.saldo}`, "", ...linhas].join("\n"),
-    teclado: nav("historico"),
+    teclado: nav("historico", extra),
   };
 }
 
-function telaComo(resumo: ResumoClube): TelaClube {
+function telaComo(resumo: ResumoClube, extra: BotaoClube[][] = []): TelaClube {
   const cfg = configAtual();
   return {
     texto: [
@@ -182,11 +205,11 @@ function telaComo(resumo: ResumoClube): TelaClube {
       "",
       `Seu código agora: ${resumo.codigo}`,
     ].join("\n"),
-    teclado: nav("como"),
+    teclado: nav("como", extra),
   };
 }
 
-function telaBeneficios(resumo: ResumoClube): TelaClube {
+function telaBeneficios(resumo: ResumoClube, extra: BotaoClube[][] = []): TelaClube {
   return {
     texto: [
       `Benefícios · ${rotuloCategoria(resumo.categoria)}`,
@@ -195,7 +218,7 @@ function telaBeneficios(resumo: ResumoClube): TelaClube {
       "",
       "Só listamos o que já existe. Campanha inexistente não aparece como benefício.",
     ].join("\n"),
-    teclado: nav("beneficios"),
+    teclado: nav("beneficios", extra),
   };
 }
 
