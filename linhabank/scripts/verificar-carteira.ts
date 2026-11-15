@@ -23,7 +23,7 @@ const { aceitarTermos, bloquearConta, confirmarCobrancaSandbox, creditarPixReceb
   "../bot/lib/banco.js"
 );
 const { montarCopiaECola } = await import("../bot/lib/brcode.js");
-const { interpretarAtualizacao } = await import("../bot/lib/atendimento.js");
+const { comVozThialinha, interpretarAtualizacao } = await import("../bot/lib/atendimento.js");
 const { sqlDisponivel } = await import("../bot/lib/db.js");
 const { movimentosDoDia, respostaStartComConta } = await import("../bot/lib/respostas.js");
 
@@ -82,6 +82,12 @@ async function saldoDe(kv: HostKvApi, chatId: string): Promise<number> {
     },
   });
   assert(foto.tipo === "comprovante", "foto de comprovante foi tratada como texto");
+}
+
+{
+  assert(comVozThialinha("Oii! Seu saldo é R$ 10,00.") === "Thialinha: Oii! Seu saldo é R$ 10,00.", "falta o nome da Thialinha");
+  assert(comVozThialinha("Thialinha: Opa") === "Thialinha: Opa", "duplicou o prefixo");
+  assert(comVozThialinha("thialinha: já estou aqui") === "Thialinha: já estou aqui", "não normalizou o prefixo");
 }
 
 {

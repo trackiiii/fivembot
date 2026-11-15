@@ -327,6 +327,15 @@ export async function registrarTroca(
   await gravarMemoria(kv, chatId, memoria);
 }
 
+export const PREFIXO_THIALINHA = "Thialinha:";
+
+export function comVozThialinha(texto: string): string {
+  const limpo = texto.replace(/^\uFEFF/, "").trim();
+  if (limpo.length === 0) return PREFIXO_THIALINHA;
+  if (/^thialinha\s*:/i.test(limpo)) return limpo.replace(/^thialinha\s*:/i, PREFIXO_THIALINHA);
+  return `${PREFIXO_THIALINHA} ${limpo}`;
+}
+
 function pedacos(texto: string): string[] {
   if (texto.length <= LIMITE_TELEGRAM) return [texto];
   const saida: string[] = [];
@@ -363,7 +372,7 @@ export async function enviarFoto(chatId: string, png: Uint8Array, caption: strin
   try {
     const form = new FormData();
     form.set("chat_id", chatId);
-    form.set("caption", caption.slice(0, 1024));
+    form.set("caption", comVozThialinha(caption).slice(0, 1024));
     form.set("photo", new Blob([Buffer.from(png)], { type: "image/png" }), "pix.png");
     const resposta = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
       method: "POST",
@@ -386,7 +395,7 @@ export async function enviarTexto(
   for (let i = 0; i < partes.length; i += 1) {
     const corpo: Record<string, unknown> = {
       chat_id: chatId,
-      text: partes[i],
+      text: comVozThialinha(partes[i]),
     };
     if (i === 0 && mensagemId !== undefined) {
       corpo.reply_parameters = { message_id: mensagemId };
@@ -498,7 +507,7 @@ export const AVISO_FALHA =
 export async function enviarTermos(chatId: string, mensagemId?: number): Promise<boolean> {
   const corpo: Record<string, unknown> = {
     chat_id: chatId,
-    text: TEXTO_TERMOS,
+    text: comVozThialinha(TEXTO_TERMOS),
     reply_markup: {
       inline_keyboard: [
         [
