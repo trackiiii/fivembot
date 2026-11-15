@@ -707,6 +707,7 @@ export async function lerAtualizacoes(
         timeout: 25,
         allowed_updates: ["message", "callback_query"],
       }),
+      signal: AbortSignal.timeout(35_000),
     });
     const json = (await resposta.json().catch(() => null)) as { ok?: boolean; result?: unknown } | null;
     if (!resposta.ok || json?.ok !== true || !Array.isArray(json.result)) {

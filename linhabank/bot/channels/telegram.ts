@@ -81,9 +81,7 @@ export default defineChannel<EstadoTelegram>({
     args.logger(perfil ? "Perfil LinhaBank atualizado no Telegram." : "Perfil do Telegram não atualizado.");
     iniciarAgendamentos(args.host.kv, args.logger);
     if (process.env.TELEGRAM_POLL !== "1") return;
-    void ouvir(args).catch(() => {
-      args.logger("A escuta do Telegram parou.");
-    });
+    void manterEscuta(args);
   },
   routes: [
     POST("/webhook", {
@@ -489,6 +487,17 @@ function iniciarAgendamentos(kv: HostKvApi, logger: (linha: string) => void): vo
   pulso();
   const timer = setInterval(pulso, 20_000);
   timer.unref();
+}
+
+async function manterEscuta(args: ChannelStartArgs): Promise<void> {
+  for (;;) {
+    try {
+      await ouvir(args);
+    } catch {
+      args.logger("A escuta do Telegram parou. Religo agora.");
+    }
+    await esperar(2000);
+  }
 }
 
 async function ouvir(args: ChannelStartArgs): Promise<void> {
