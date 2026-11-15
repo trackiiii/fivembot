@@ -40,7 +40,7 @@ export const incompreensao: Fala[] = [
   { id: "inc-1", texto: "Iiih{nome}, não peguei direito. Pode mandar de outro jeito? Saldo, depósito, PIX, extrato..." },
   { id: "inc-2", texto: "Aaaah, não entendi. Me fala com outras palavras, bem soltinho." },
   { id: "inc-3", texto: "Fui burra agora. Repete pra mim? Pode ser curto." },
-  { id: "inc-4", texto: "Não tenho uma resposta boa pra isso ainda. Se for da conta, me fala saldo, PIX ou depósito. Se for outra coisa, tenta explicar de novo." },
+  { id: "inc-4", texto: "Iiih, essa passou batido. Você quer receber um PIX, mandar um, ver saldo... ou era outra coisa?" },
   { id: "inc-5", texto: "Hmm, ficou solto pra mim. Você quer consultar, mandar ou receber?" },
   { id: "inc-6", texto: "Desculpa, não encavalei. Manda de novo, por favor." },
   { id: "inc-7", texto: "Pode ser que eu tenha me perdido. Quer olhar a conta ou era só um oi?" },

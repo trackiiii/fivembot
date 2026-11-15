@@ -35,6 +35,49 @@ function pedidoEnvio(texto: string): boolean {
   return tem(texto, ["manda", "mandar", "enviar", "envia", "transfere", "transferir", "pix pra", "pix para", "pix pro"]);
 }
 
+function pedidoReceber(texto: string): boolean {
+  if (/\brecebi\b/.test(texto) || tem(texto, ["pix recebido", "ja recebi", "já recebi"])) return false;
+  if (
+    tem(texto, [
+      "receber pix",
+      "receber um pix",
+      "receber o pix",
+      "receber dinheiro",
+      "quero receber",
+      "pra receber",
+      "para receber",
+      "como recebo",
+      "como receber",
+      "gerar qr",
+      "gera qr",
+      "gerar o qr",
+      "gera o qr",
+      "gerar um qr",
+      "gera um qr",
+      "gerar pix",
+      "gera pix",
+      "gerar um pix",
+      "gera um pix",
+      "me gera",
+      "me manda o qr",
+      "manda o qr",
+      "quero um qr",
+      "pix pra mim",
+      "pix para mim",
+      "pix de entrada",
+      "depositar pix",
+      "deposito pix",
+      "depósito pix",
+      "qr do pix",
+      "meu qr",
+    ])
+  ) {
+    return true;
+  }
+  if (/^(receber|recebe|recebimento|depositar|deposito|depósito|qr)$/.test(texto)) return true;
+  return /\breceber\b/.test(texto) && !pedidoEnvio(texto);
+}
+
 export function classificarTexto(textoBruto: string, pendente?: "valor_deposito" | "ajuda"): Intencao {
   const texto = normalizar(textoBruto);
   if (texto.length === 0) return { categoria: "incompreensao", confianca: 0.4 };
@@ -96,19 +139,22 @@ export function classificarTexto(textoBruto: string, pendente?: "valor_deposito"
     return { categoria: "extratos", confianca: 0.9 };
   }
 
-  if (tem(texto, ["deposit", "colocar dinheiro", "por dinheiro", "entrar dinheiro", "qr code", "qrcode", "copia e cola", "copia cola"])) {
-    return { categoria: "depositos", confianca: 0.9 };
-  }
-
   if (tem(texto, ["nao caiu", "não caiu", "ainda nao entrou", "ainda não entrou", "pendente", "cadê o pix", "cade o pix", "to no aguardo", "tô no aguardo"])) {
     return { categoria: "pendentes", confianca: 0.88 };
   }
 
-  if (tem(texto, ["caiu", "confirmou", "deposito confirmado", "depósito confirmado", "entrou o pix", "pix recebido"])) {
+  if (tem(texto, ["caiu", "confirmou", "deposito confirmado", "depósito confirmado", "entrou o pix", "pix recebido", "recebi o pix", "recebi um pix", "ja recebi", "já recebi"])) {
     return { categoria: "confirmados", confianca: 0.85 };
   }
 
-  if (tem(texto, ["transfere", "transferir", "mandar pix", "enviar pix", "fazer um pix", "pix para", "pix pra"])) {
+  if (
+    pedidoReceber(texto) ||
+    tem(texto, ["deposit", "colocar dinheiro", "por dinheiro", "entrar dinheiro", "qr code", "qrcode", "copia e cola", "copia cola"])
+  ) {
+    return { categoria: "depositos", confianca: 0.92 };
+  }
+
+  if (tem(texto, ["transfere", "transferir", "mandar pix", "enviar pix", "fazer um pix", "fazer pix", "pix para", "pix pra", "manda pix", "envia pix"])) {
     return { categoria: "transferencias", confianca: 0.8 };
   }
 
@@ -136,8 +182,8 @@ export function classificarTexto(textoBruto: string, pendente?: "valor_deposito"
     return { categoria: "informal", confianca: 0.7 };
   }
 
-  if (texto.split(" ").length <= 2 && !/\d/.test(texto)) {
-    return { categoria: "incompreensao", confianca: 0.45 };
+  if (/^[.?!,;:\-\s]+$/.test(texto) || texto.length < 2) {
+    return { categoria: "incompreensao", confianca: 0.4 };
   }
 
   return { categoria: "modelo", confianca: 1 };

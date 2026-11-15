@@ -33,6 +33,13 @@ assert(classificarTexto("oii").categoria === "saudacoes", "oi não foi saudaçã
 assert(classificarTexto("quem é você?").categoria === "apresentacao", "apresentação falhou");
 assert(classificarTexto("qual é o meu saldo?").categoria === "saldo", "saldo falhou");
 assert(classificarTexto("quero depositar").categoria === "depositos", "depósito falhou");
+assert(classificarTexto("receber pix").categoria === "depositos", "receber pix não foi depósito");
+assert(classificarTexto("quero receber um pix").categoria === "depositos", "quero receber um pix não foi depósito");
+assert(classificarTexto("como recebo pix").categoria === "depositos", "como recebo pix não foi depósito");
+assert(classificarTexto("gerar qr").categoria === "depositos", "gerar qr não foi depósito");
+assert(classificarTexto("pix recebido").categoria === "confirmados", "pix recebido não foi confirmação");
+assert(classificarTexto("sim").categoria === "modelo", "sim não foi para o modelo");
+assert(classificarTexto("fazer pix").categoria === "transferencias", "fazer pix não foi transferência");
 assert(classificarTexto("segue o comprovante, já paguei").categoria === "comprovantes", "comprovante falhou");
 assert(classificarTexto("valeu demais").categoria === "agradecimentos", "agradecimento falhou");
 assert(classificarTexto("tchau").categoria === "despedidas", "despedida falhou");
@@ -85,6 +92,16 @@ assert(classificarTexto("quero agendar um pix").categoria === "modelo", "agendar
   const kv = kvMemoria();
   const complexo = await responderLocal(kv, "5", "manda 50,00 pra ana@email.com", "Eva", true, false, "p1");
   assert(complexo.tipo === "modelo", "PIX complexo não foi para o modelo");
+}
+
+{
+  const kv = kvMemoria();
+  await aceitarTermos(kv, "6", "Fábio Lima");
+  const receber = await responderLocal(kv, "6", "receber pix", "Fábio", true, false, "d1");
+  assert(receber.tipo === "texto" && receber.categoria === "depositos", "receber pix não pediu valor");
+  if (receber.tipo !== "texto") throw new Error("receber pix não pediu valor");
+  assert(/valor|quanto|receber|dep[oó]sit|qr|pix/i.test(receber.texto), "receber pix não soou a depósito");
+  assert(!/n[aã]o tenho uma resposta boa/i.test(receber.texto), "receber pix caiu em incompreensão");
 }
 
 console.log(`conversa ok (${contagem.total} falas)`);

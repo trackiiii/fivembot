@@ -9,6 +9,9 @@ export const depositos: Fala[] = [
   { id: "dep-6", texto: "Opa, depósito. Se você já tiver o valor, me manda. Se não, a gente escolhe juntos." },
   { id: "dep-7", texto: "Tá na mão{nome}. Valor do depósito?" },
   { id: "dep-8", texto: "Aaaah, entendi, você quer colocar dinheiro na conta. Me fala quanto." },
+  { id: "dep-9", texto: "Opa, receber PIX. Eu gero o QR e o copia e cola pra cair na sua conta. Qual valor você quer receber?" },
+  { id: "dep-10", texto: "Perfeitooo{nome}. Pra o dinheiro entrar, me fala o valor que eu monto o PIX agora." },
+  { id: "dep-11", texto: "Show, receber na conta. O saldo só muda depois da confirmação. Quanto você quer receber?" },
 ];
 
 export const depositoGerado: Fala[] = [
