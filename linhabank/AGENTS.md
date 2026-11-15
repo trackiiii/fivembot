@@ -31,7 +31,7 @@ Run the CLI under Node, never Bun.
 - Cada chat tem a própria conta. Saldo e extrato saem do ledger. Sem `DATABASE_URL` o ledger fica no kv; com Postgres, o SQL é a fonte da verdade. Com `ASAAS_API_KEY`, o PSP é o Asaas (`POST /v3/transfers` e QR estático). Sem Asaas, o adaptador HTTP `POST /v1/pix/enviar` continua. Agência, número e chave interna servem para transferência entre contas LinhaBank.
 - Depósito PIX gera cobrança (QR + copia e cola). Crédito só no webhook do provedor, com idempotência. Foto de comprovante não credita.
 - O mini-app do Telegram vive em `bot/channels/app.ts` e `bot/lib/app/`. Autentica com initData. Não coloca teclado no chat. PIX de saída exige `confirmar: true`.
-- A gerência é um teclado inline no Telegram (`/admin`, `bot/lib/admin/`). Linguagem operacional, sem menção a IA. Configuração em `bot/lib/config.ts` (`linhabank:config`). Não use a Thialinha nem HTML para operar o painel.
+- A gerência é um teclado inline no Telegram (`/admin`, `bot/lib/admin/`). Linguagem operacional, sem menção a IA. Configuração em `bot/lib/config.ts` (`linhabank:config`). Não use a Thialinha nem HTML para operar o painel. Anúncio (aba do painel) envia texto e imagem para todas as contas, sem prefixo da Thialinha.
 - A Thialinha não explica essa ligação ao cliente. Termos, catálogo, descrição do Telegram e mensagens do chat não citam gateway.
 - Não reative o diário compartilhado. Um `memoryHook` mistura mensagens de clientes diferentes.
 

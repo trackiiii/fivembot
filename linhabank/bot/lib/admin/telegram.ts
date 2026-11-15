@@ -14,6 +14,7 @@ import { ehAdmin } from "../modo.js";
 import {
   abrirTelaInicial,
   aplicarAcao,
+  aplicarMidiaAdmin,
   aplicarTextoAdmin,
   gravarUi,
   lerComandoAdmin,
@@ -24,6 +25,7 @@ import {
 
 type CallbackAdmin = Extract<Atualizacao, { tipo: "callback" }>;
 type TextoAdmin = Extract<Atualizacao, { tipo: "texto" }>;
+type MidiaAdmin = Extract<Atualizacao, { tipo: "comprovante" }>;
 
 export async function tratarCallbackAdmin(kv: HostKvApi, atualizacao: CallbackAdmin): Promise<void> {
   await garantirConfig(kv);
@@ -77,6 +79,29 @@ export async function tratarTextoAdmin(kv: HostKvApi, atualizacao: TextoAdmin): 
     await configurarMenuApp();
     await configurarComandosAdmin(atualizacao.chatId);
   }
+  return true;
+}
+
+export async function tratarMidiaAdmin(kv: HostKvApi, atualizacao: MidiaAdmin): Promise<boolean> {
+  await garantirConfig(kv);
+  if (!ehAdmin(atualizacao.chatId)) return false;
+  const resultado = await aplicarMidiaAdmin(kv, atualizacao.chatId, {
+    fotoId: atualizacao.fotoId,
+    caption: atualizacao.caption,
+  });
+  if (resultado === undefined) return false;
+  const ui = await lerUi(kv, atualizacao.chatId);
+  const id = await mostrarPainel(atualizacao.chatId, resultado.tela, ui.mensagemId);
+  await gravarUi(kv, atualizacao.chatId, { ...ui, mensagemId: id ?? ui.mensagemId });
+  return true;
+}
+
+export async function tratarSemTextoAdmin(kv: HostKvApi, chatId: string): Promise<boolean> {
+  await garantirConfig(kv);
+  if (!ehAdmin(chatId)) return false;
+  const ui = await lerUi(kv, chatId);
+  if (ui.aba !== "anuncio" && ui.aba !== "anunciook") return false;
+  await enviarTexto(chatId, "Envie o texto ou uma foto para o comunicado.", { prefixo: false });
   return true;
 }
 

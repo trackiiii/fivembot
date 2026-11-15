@@ -169,6 +169,11 @@ export async function listarContasSql(limite = 50): Promise<Conta[]> {
   return rows.map((row) => contaDe(row));
 }
 
+export async function listarChatIdsSql(): Promise<string[]> {
+  const rows = await sql<{ chat_id: string }>("select chat_id from contas order by aceitou_em desc");
+  return rows.map((row) => row.chat_id);
+}
+
 export async function listarLedgerSql(limite = 40): Promise<Lancamento[]> {
   const rows = await sql<{
     id: string;

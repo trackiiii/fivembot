@@ -28,6 +28,7 @@ import {
   lerCobrancaSql,
   lerCobrancaTxidSql,
   listarCobrancasSql,
+  listarChatIdsSql,
   listarContasSql,
   listarLedgerSql,
   upsertContaSql,
@@ -1154,6 +1155,11 @@ export async function painelCarteira(kv: HostKvApi): Promise<{
       txid: item.txid,
     })),
   };
+}
+
+export async function listarChatIdsClientes(kv: HostKvApi): Promise<string[]> {
+  if (sqlDisponivel()) return listarChatIdsSql();
+  return listarChatIds(kv);
 }
 
 export async function confirmarCobrancaSandbox(

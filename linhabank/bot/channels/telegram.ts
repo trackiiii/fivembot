@@ -4,7 +4,7 @@ import type { ChannelStartArgs } from "@grok/agent-sdk";
 import * as z from "zod/v4";
 
 import { comandoAgendamentos, listarAgendamentos, processarAgendamentos } from "../lib/agenda.js";
-import { tratarCallbackAdmin, tratarTextoAdmin } from "../lib/admin/telegram.js";
+import { tratarCallbackAdmin, tratarMidiaAdmin, tratarSemTextoAdmin, tratarTextoAdmin } from "../lib/admin/telegram.js";
 import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } from "../lib/banco.js";
 import { garantirConfig } from "../lib/config.js";
 import { chatsAdmin } from "../lib/modo.js";
@@ -133,10 +133,12 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
   await deps.kv.put(visto, true);
 
   if (atualizacao.tipo === "sem_texto") {
+    if (await tratarSemTextoAdmin(deps.kv, atualizacao.chatId)) return;
     await responderSemTexto(deps.kv, atualizacao);
     return;
   }
   if (atualizacao.tipo === "comprovante") {
+    if (await tratarMidiaAdmin(deps.kv, atualizacao)) return;
     const local = await responderLocal(
       deps.kv,
       atualizacao.chatId,

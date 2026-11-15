@@ -61,7 +61,15 @@ export type EstadoTelegram = {
 export type Atualizacao =
   | { tipo: "ignorar" }
   | { tipo: "sem_texto"; chatId: string; mensagemId: number; nome: string; updateId: number }
-  | { tipo: "comprovante"; chatId: string; mensagemId: number; nome: string; updateId: number }
+  | {
+      tipo: "comprovante";
+      chatId: string;
+      mensagemId: number;
+      nome: string;
+      updateId: number;
+      fotoId?: string;
+      caption?: string;
+    }
   | {
       tipo: "texto";
       chatId: string;
@@ -94,8 +102,21 @@ const mensagemSchema = z.object({
   message_id: z.number().int(),
   text: z.string().optional(),
   caption: z.string().optional(),
-  photo: z.array(z.unknown()).optional(),
-  document: z.unknown().optional(),
+  photo: z
+    .array(
+      z.object({
+        file_id: z.string(),
+        width: z.number().optional(),
+        height: z.number().optional(),
+      }),
+    )
+    .optional(),
+  document: z
+    .object({
+      file_id: z.string(),
+      mime_type: z.string().optional(),
+    })
+    .optional(),
   from: z
     .object({
       first_name: z.string().optional(),
@@ -107,6 +128,23 @@ const mensagemSchema = z.object({
     type: z.string(),
   }),
 });
+
+function fotoIdDaMensagem(mensagem: {
+  photo?: { file_id: string; width?: number }[];
+  document?: { file_id: string; mime_type?: string };
+}): string | undefined {
+  if (mensagem.photo !== undefined && mensagem.photo.length > 0) {
+    const maior = mensagem.photo.reduce((atual, item) =>
+      (item.width ?? 0) >= (atual.width ?? 0) ? item : atual,
+    );
+    return maior.file_id.length > 0 ? maior.file_id : undefined;
+  }
+  const mime = mensagem.document?.mime_type ?? "";
+  if (mensagem.document !== undefined && /^image\/(jpeg|jpg|png|webp|gif)$/i.test(mime)) {
+    return mensagem.document.file_id.length > 0 ? mensagem.document.file_id : undefined;
+  }
+  return undefined;
+}
 
 const atualizacaoSchema = z.object({
   update_id: z.number().int(),
@@ -222,9 +260,16 @@ export function interpretarAtualizacao(corpo: unknown): Atualizacao {
     nome: nomeSeguro(mensagem.from?.first_name),
     updateId: lido.data.update_id,
   };
+  const caption = cortar(mensagem.caption ?? "", LIMITE_MENSAGEM);
   const texto = cortar(mensagem.text ?? mensagem.caption ?? "", LIMITE_MENSAGEM);
   if ((mensagem.photo !== undefined && mensagem.photo.length > 0) || mensagem.document !== undefined) {
-    return { tipo: "comprovante", ...base };
+    const fotoId = fotoIdDaMensagem(mensagem);
+    return {
+      tipo: "comprovante",
+      ...base,
+      ...(fotoId !== undefined ? { fotoId } : {}),
+      ...(caption.length > 0 ? { caption } : {}),
+    };
   }
   if (texto.length === 0) return { tipo: "sem_texto", ...base };
   return { tipo: "texto", ...base, texto };
@@ -409,6 +454,28 @@ async function postTelegram(metodo: string, corpo: Record<string, unknown>): Pro
 
 async function chamarTelegram(metodo: string, corpo: Record<string, unknown>): Promise<boolean> {
   const resposta = await postTelegram(metodo, corpo);
+  return resposta.ok === true;
+}
+
+export async function enviarFotoId(
+  chatId: string,
+  fileId: string,
+  caption?: string,
+  opcoes: { prefixo?: boolean } = {},
+): Promise<boolean> {
+  const prefixo = opcoes.prefixo !== false;
+  const corpo: Record<string, unknown> = {
+    chat_id: chatId,
+    photo: fileId,
+  };
+  const bruto = (caption ?? "").trim();
+  if (bruto.length > 0) {
+    const texto = (prefixo ? comVozThialinha(bruto) : bruto).slice(0, 1024);
+    const formatado = comParseHtml(texto, prefixo);
+    corpo.caption = formatado.text;
+    if (formatado.parse_mode !== undefined) corpo.parse_mode = formatado.parse_mode;
+  }
+  const resposta = await postTelegram("sendPhoto", corpo);
   return resposta.ok === true;
 }
 

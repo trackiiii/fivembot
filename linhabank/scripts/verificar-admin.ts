@@ -17,12 +17,14 @@ const { taxaPixExternoCentavos, taxaPixExternoRecebimentoCentavos } = await impo
 const { ehAdmin, modoCarteira } = await import("../bot/lib/modo.js");
 const {
   aplicarAcao,
+  aplicarMidiaAdmin,
   aplicarTextoAdmin,
   lerComandoAdmin,
   montarTela,
   parseAcao,
   tentarAbrirAdmin,
 } = await import("../bot/lib/admin/painel.js");
+const { textoClienteAnuncio } = await import("../bot/lib/admin/anuncio.js");
 
 function assert(condicao: boolean, mensagem: string): void {
   if (!condicao) throw new Error(mensagem);
@@ -57,6 +59,11 @@ function semIa(texto: string): void {
   assert(lerComandoAdmin("/admin@linhabank_bot token-admin-teste")?.token === "token-admin-teste", "token do /admin");
   assert(lerComandoAdmin("saldo") === undefined, "saldo não é /admin");
   assert(parseAcao("a:g")?.tipo === "aba", "botão Ajustes");
+  assert(parseAcao("a:n")?.tipo === "aba", "botão Anúncio");
+  assert(parseAcao("a:nl")?.tipo === "anuncio_limpar", "botão limpar anúncio");
+  assert(parseAcao("a:np")?.tipo === "anuncio_previa", "botão prévia anúncio");
+  assert(parseAcao("a:ns")?.tipo === "anuncio_enviar", "botão enviar anúncio");
+  assert(parseAcao("a:ny")?.tipo === "anuncio_confirmar", "botão confirmar anúncio");
   assert(parseAcao("a:o")?.tipo === "aba", "botão Mais opções");
   assert(parseAcao("a:k:f")?.tipo === "pedir", "botão tarifa");
   assert((parseAcao("a:k:m") as { campo?: string }).campo === "canalMovimento", "botão canal de movimento");
@@ -65,7 +72,7 @@ function semIa(texto: string): void {
   assert(parseAcao("a:j:0")?.tipo === "cartao", "botão cartão");
   assert(parseAcao("a:y:1")?.tipo === "cancelar_pix", "botão cancelar PIX");
   assert((parseAcao("a:x:2") as { indice?: number }).indice === 2, "índice liquidar PIX");
-  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m"];
+  const todos = ["a:v", "a:c", "a:p", "a:l", "a:g", "a:n", "a:nl", "a:np", "a:ns", "a:ny", "a:o", "a:ms", "a:ml", "a:my", "a:z", "a:r", "a:t:p", "a:t:b", "a:q", "a:k:m"];
   for (const dados of todos) {
     assert(parseAcao(dados) !== undefined, `callback ${dados}`);
     assert(dados.length <= 64, `callback longo ${dados}`);
@@ -94,7 +101,7 @@ function semIa(texto: string): void {
   assert(visao.texto.includes("homologação"), "painel sem ambiente");
   semIa(visao.texto);
   const dados = botoes(visao);
-  assert(dados.includes("a:g") && dados.includes("a:ms"), "visão sem tarifas/ambiente");
+  assert(dados.includes("a:g") && dados.includes("a:ms") && dados.includes("a:n"), "visão sem tarifas/ambiente/anúncio");
   assert(dados.every((item) => item.startsWith("a:") && item.length <= 64), "callback fora do padrão");
 }
 
@@ -277,6 +284,89 @@ function semIa(texto: string): void {
   const kv = kvMemoria();
   await garantirConfig(kv);
   assert(modoCarteira() === "sandbox", "kv vazio não voltou ao padrão");
+}
+
+{
+  assert(textoClienteAnuncio("Manutenção no sábado.").startsWith("LINHABANK\nComunicado"), "anúncio sem cabeçalho");
+  assert(!/Thialinha/i.test(textoClienteAnuncio("Manutenção no sábado.")), "anúncio com Thialinha");
+  const foto = interpretarAtualizacao({
+    update_id: 31,
+    message: {
+      message_id: 12,
+      chat: { id: 1001, type: "private" },
+      from: { first_name: "Ana", is_bot: false },
+      caption: "Promo do mês",
+      photo: [
+        { file_id: "AgAC-pequena-01", width: 90 },
+        { file_id: "AgAC-grande-arquivo", width: 1280 },
+      ],
+    },
+  });
+  assert(foto.tipo === "comprovante" && foto.fotoId === "AgAC-grande-arquivo", "foto do anúncio sem file_id");
+  assert(foto.tipo === "comprovante" && foto.caption === "Promo do mês", "foto do anúncio sem legenda");
+}
+
+{
+  const originalFetch = globalThis.fetch;
+  const tokenAnterior = process.env.TELEGRAM_BOT_TOKEN;
+  process.env.TELEGRAM_BOT_TOKEN = "token-anuncio-teste";
+  const envios: { metodo: string; chatId: string; text: string; photo?: string; caption?: string }[] = [];
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const telegramUrl = url.match(/^https:\/\/api\.telegram\.org\/bottoken-anuncio-teste\/(\w+)$/);
+    if (telegramUrl === null) throw new Error(`rede bloqueada no teste anúncio: ${new URL(url).host}`);
+    const corpo = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, string>) : {};
+    envios.push({
+      metodo: telegramUrl[1] ?? "",
+      chatId: String(corpo.chat_id ?? ""),
+      text: String(corpo.text ?? ""),
+      photo: typeof corpo.photo === "string" ? corpo.photo : undefined,
+      caption: typeof corpo.caption === "string" ? corpo.caption : undefined,
+    });
+    return new Response(JSON.stringify({ ok: true, result: { message_id: envios.length } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const kv = kvMemoria();
+    await gravarConfig(kv, { chatsAdmin: "1001" });
+    await aceitarTermos(kv, "77", "Ana");
+    await aceitarTermos(kv, "88", "Bia");
+    const tela = await aplicarAcao(kv, "1001", "a:n");
+    assert(tela.tela.texto.includes("Anúncio"), "aba anúncio não abriu");
+    assert(tela.tela.texto.includes("2 conta"), "anúncio sem destinatários");
+    semIa(tela.tela.texto);
+    assert(tela.tela.teclado.flat().some((b) => b.callback_data === "a:ns"), "anúncio sem enviar");
+    const vazio = await aplicarAcao(kv, "1001", "a:ns");
+    assert((vazio.aviso ?? "").includes("texto ou anexe uma imagem"), "envio vazio passou");
+    const texto = await aplicarTextoAdmin(kv, "1001", "Manutenção no sábado às 02:00.");
+    assert(texto !== undefined && texto.tela.texto.includes("Manutenção no sábado"), "texto do anúncio não gravou");
+    const midia = await aplicarMidiaAdmin(kv, "1001", { fotoId: "AgAC-grande-arquivo" });
+    assert(midia !== undefined && midia.tela.texto.includes("anexada"), "imagem do anúncio não anexou");
+    const confirmar = await aplicarAcao(kv, "1001", "a:ns");
+    assert(confirmar.tela.texto.includes("Confirmar envio"), "confirmação do anúncio não abriu");
+    semIa(confirmar.tela.texto);
+    const enviado = await aplicarAcao(kv, "1001", "a:ny");
+    assert((enviado.aviso ?? "").includes("2 entregue"), `envio do anúncio: ${enviado.aviso}`);
+    const fotos = envios.filter((item) => item.metodo === "sendPhoto");
+    assert(fotos.length === 2, `sendPhoto ${fotos.length}`);
+    assert(
+      fotos.every((item) => item.photo === "AgAC-grande-arquivo" && (item.caption ?? "").includes("Manutenção no sábado")),
+      "foto do anúncio sem o texto",
+    );
+    assert(
+      fotos.some((item) => item.chatId === "77") && fotos.some((item) => item.chatId === "88"),
+      "anúncio não foi para todos os clientes",
+    );
+    assert(!fotos.some((item) => item.chatId === "1001"), "anúncio foi para o operador sem conta");
+    assert(fotos.every((item) => !(item.caption ?? "").includes("Thialinha")), "anúncio com prefixo da Thialinha");
+    assert(enviado.tela.texto.includes("1 entregue") || enviado.tela.texto.includes("entregue"), "histórico sem o envio");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (tokenAnterior === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = tokenAnterior;
+  }
 }
 
 console.log("admin ok");

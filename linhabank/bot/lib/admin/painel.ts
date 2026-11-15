@@ -8,6 +8,7 @@ import {
   bloquearConta,
   cancelarCobrancaAberta,
   confirmarCobrancaSandbox,
+  listarChatIdsClientes,
   operarConta,
   painelCarteira,
   reaisDe,
@@ -19,12 +20,34 @@ import { consultarTaxasGateway, rotuloLiquidacao, type TaxasPsp } from "../psp.j
 import { dataHoraBrasil, formatarQuando } from "../horario.js";
 import { ehAdmin, emSandbox } from "../modo.js";
 import { detalheTaxaPixExterno } from "../taxa.js";
+import {
+  aplicarFotoRascunho,
+  aplicarTextoRascunho,
+  entregarPrevia,
+  enviarAnuncioAosClientes,
+  lerRascunho,
+  limparRascunho,
+  rascunhoVazio,
+  telaAnuncio,
+  telaConfirmarAnuncio,
+} from "./anuncio.js";
 
 export const CHAVE_UI = (chatId: string) => `linhabank:admin:ui:${chatId}`;
 export const CHAVE_PENDENTE = (chatId: string) => `linhabank:admin:pendente:${chatId}`;
 export const CHAVE_TAXAS_GATEWAY = "linhabank:taxas-gateway";
 
-export type AbaAdmin = "visao" | "contas" | "pix" | "ledger" | "config" | "mais" | "liveok" | "ficha" | "extrato";
+export type AbaAdmin =
+  | "visao"
+  | "contas"
+  | "pix"
+  | "ledger"
+  | "config"
+  | "mais"
+  | "liveok"
+  | "ficha"
+  | "extrato"
+  | "anuncio"
+  | "anunciook";
 export type CampoPendente =
   | "nomeExibido"
   | "chaveRecebimento"
@@ -177,6 +200,11 @@ export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdm
   if (ui.aba === "mais") return telaMais(config);
   if (ui.aba === "ficha") return telaFicha(painel, ui.indice ?? 0);
   if (ui.aba === "extrato") return telaExtrato(kv, painel, ui.indice ?? 0);
+  if (ui.aba === "anuncio") return telaAnuncio(kv, chatId, nav("anuncio"));
+  if (ui.aba === "anunciook") {
+    const rascunho = await lerRascunho(kv, chatId);
+    return telaConfirmarAnuncio(rascunho, (await listarChatIdsClientes(kv)).length, nav("anuncio"));
+  }
   return telaResumo(painel, config, await contarAgendamentosAtivos(kv));
 }
 
@@ -187,7 +215,15 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
   if (acao.tipo === "cancelar") {
     await kv.delete(CHAVE_PENDENTE(chatId));
     const ui = await lerUi(kv, chatId);
-    await gravarUi(kv, chatId, { ...ui, aba: ui.aba === "liveok" ? "visao" : ui.aba === "ficha" || ui.aba === "extrato" ? "contas" : ui.aba });
+    const aba =
+      ui.aba === "liveok"
+        ? "visao"
+        : ui.aba === "ficha" || ui.aba === "extrato"
+          ? "contas"
+          : ui.aba === "anunciook"
+            ? "anuncio"
+            : ui.aba;
+    await gravarUi(kv, chatId, { ...ui, aba });
     return { tela: await montarTela(kv, chatId), aviso: "Operação cancelada." };
   }
   if (acao.tipo === "aba") {
@@ -221,6 +257,52 @@ export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string):
   if (acao.tipo === "pedir") {
     await kv.put(CHAVE_PENDENTE(chatId), acao.campo);
     return { tela: telaPendente(acao.campo) };
+  }
+  if (acao.tipo === "anuncio_limpar") {
+    await limparRascunho(kv, chatId);
+    await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+    return { tela: await montarTela(kv, chatId), aviso: "Rascunho apagado." };
+  }
+  if (acao.tipo === "anuncio_previa") {
+    const rascunho = await lerRascunho(kv, chatId);
+    if (rascunhoVazio(rascunho)) {
+      await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+      return { tela: await montarTela(kv, chatId), aviso: "Informe o texto ou anexe uma imagem." };
+    }
+    await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+    const ok = await entregarPrevia(chatId, rascunho);
+    return {
+      tela: await montarTela(kv, chatId),
+      aviso: ok ? "Prévia enviada nesta conversa." : "Não foi possível enviar a prévia.",
+    };
+  }
+  if (acao.tipo === "anuncio_enviar") {
+    const rascunho = await lerRascunho(kv, chatId);
+    if (rascunhoVazio(rascunho)) {
+      await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+      return { tela: await montarTela(kv, chatId), aviso: "Informe o texto ou anexe uma imagem." };
+    }
+    const destinos = await listarChatIdsClientes(kv);
+    if (destinos.length === 0) {
+      await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+      return { tela: await montarTela(kv, chatId), aviso: "Nenhuma conta para receber o comunicado." };
+    }
+    await gravarUi(kv, chatId, { aba: "anunciook", pagina: 0 });
+    return { tela: await montarTela(kv, chatId) };
+  }
+  if (acao.tipo === "anuncio_confirmar") {
+    const rascunho = await lerRascunho(kv, chatId);
+    if (rascunhoVazio(rascunho)) {
+      await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+      return { tela: await montarTela(kv, chatId), aviso: "Informe o texto ou anexe uma imagem." };
+    }
+    const envio = await enviarAnuncioAosClientes(kv, rascunho, chatId);
+    await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+    const aviso =
+      envio.destinatarios === 0
+        ? "Nenhuma conta para receber o comunicado."
+        : `Comunicado enviado. ${envio.entregues} entregue(s), ${envio.falhas} falha(s).`;
+    return { tela: await montarTela(kv, chatId), aviso };
   }
   if (acao.tipo === "toggle") {
     const atual = configAtual();
@@ -284,7 +366,14 @@ export async function aplicarTextoAdmin(
   texto: string,
 ): Promise<ResultadoAdmin | undefined> {
   const campo = await lerPendente(kv, chatId);
-  if (campo === undefined) return undefined;
+  if (campo === undefined) {
+    const ui = await lerUi(kv, chatId);
+    if (ui.aba !== "anuncio" && ui.aba !== "anunciook") return undefined;
+    const rascunho = await aplicarTextoRascunho(kv, chatId, texto);
+    if (rascunho === undefined) return undefined;
+    await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+    return { tela: await montarTela(kv, chatId), aviso: "Texto gravado no rascunho." };
+  }
   await garantirConfig(kv);
   if (campo === "busca") {
     const painel = await painelCarteira(kv);
@@ -315,6 +404,22 @@ export async function aplicarTextoAdmin(
   };
 }
 
+export async function aplicarMidiaAdmin(
+  kv: HostKvApi,
+  chatId: string,
+  midia: { fotoId?: string; caption?: string },
+): Promise<ResultadoAdmin | undefined> {
+  const ui = await lerUi(kv, chatId);
+  if (ui.aba !== "anuncio" && ui.aba !== "anunciook") return undefined;
+  const aplicado = await aplicarFotoRascunho(kv, chatId, midia.fotoId, midia.caption);
+  if (aplicado === undefined) {
+    await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+    return { tela: await montarTela(kv, chatId), aviso: "Envie a imagem como foto (JPEG, PNG ou WEBP)." };
+  }
+  await gravarUi(kv, chatId, { aba: "anuncio", pagina: 0 });
+  return { tela: await montarTela(kv, chatId), aviso: aplicado.aviso };
+}
+
 export function parseAcao(dados: string):
   | { tipo: "aba"; aba: AbaAdmin; pagina?: number; indice?: number }
   | { tipo: "modo"; modo: "sandbox" | "live" | "live?" }
@@ -326,8 +431,17 @@ export function parseAcao(dados: string):
   | { tipo: "toggle"; campo: "prefixoThialinha" | "botaoMiniApp" }
   | { tipo: "cancelar" }
   | { tipo: "atualizar" }
+  | { tipo: "anuncio_limpar" }
+  | { tipo: "anuncio_previa" }
+  | { tipo: "anuncio_enviar" }
+  | { tipo: "anuncio_confirmar" }
   | undefined {
   if (dados === "a:v") return { tipo: "aba", aba: "visao" };
+  if (dados === "a:n") return { tipo: "aba", aba: "anuncio" };
+  if (dados === "a:nl") return { tipo: "anuncio_limpar" };
+  if (dados === "a:np") return { tipo: "anuncio_previa" };
+  if (dados === "a:ns") return { tipo: "anuncio_enviar" };
+  if (dados === "a:ny") return { tipo: "anuncio_confirmar" };
   if (dados === "a:g") return { tipo: "aba", aba: "config" };
   if (dados === "a:o") return { tipo: "aba", aba: "mais" };
   if (dados === "a:ms") return { tipo: "modo", modo: "sandbox" };
@@ -374,7 +488,9 @@ function abaValida(valor: unknown): valor is AbaAdmin {
     valor === "mais" ||
     valor === "liveok" ||
     valor === "ficha" ||
-    valor === "extrato"
+    valor === "extrato" ||
+    valor === "anuncio" ||
+    valor === "anunciook"
   );
 }
 
@@ -432,7 +548,7 @@ function nav(aba: AbaAdmin): BotaoAdmin[][] {
   });
   return [
     [marca("visao", "Início", "a:v"), marca("contas", "Contas", "a:c"), marca("pix", "PIX", "a:p")],
-    [marca("ledger", "Lançamentos", "a:l"), marca("config", "Ajustes", "a:g")],
+    [marca("ledger", "Lançamentos", "a:l"), marca("config", "Ajustes", "a:g"), marca("anuncio", "Anúncio", "a:n")],
   ];
 }
 
