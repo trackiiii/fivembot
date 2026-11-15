@@ -1,5 +1,62 @@
+import { dataHoraBrasil } from "./horario.js";
+
 export const RESPOSTA_AJUDA =
   "Sua conta LinhaBank está ativa. Posso consultar saldo e extrato, receber depósito no PIX, enviar PIX, agendar PIX, transferir entre contas LinhaBank, pagar boleto ou bloquear o cartão virtual. O que você precisa?";
+
+export type ItemExtrato = {
+  em: string;
+  tipo: string;
+  valor: string;
+  descricao: string;
+  comprovante?: string;
+};
+
+const ROTULO_TIPO: Record<string, string> = {
+  pix_enviado: "PIX enviado",
+  pix_recebido: "PIX recebido",
+  deposito: "depósito",
+  boleto: "boleto",
+  transferencia_enviada: "transferência enviada",
+  transferencia_recebida: "transferência recebida",
+  taxa: "taxa",
+  estorno: "estorno",
+};
+
+export function movimentosDoDia(itens: ItemExtrato[], agora = new Date()): ItemExtrato[] {
+  const hoje = dataHoraBrasil(agora).data;
+  return itens
+    .filter((item) => {
+      const instante = Date.parse(item.em);
+      if (!Number.isFinite(instante)) return false;
+      return dataHoraBrasil(new Date(instante)).data === hoje;
+    })
+    .sort((a, b) => Date.parse(a.em) - Date.parse(b.em));
+}
+
+export function respostaStartComConta(dados: {
+  nome?: string;
+  saldo: string;
+  movimentos: ItemExtrato[];
+}): string {
+  const pedaco = (dados.nome ?? "").trim().split(/\s+/)[0] ?? "";
+  const nome = pedaco.length >= 2 && pedaco.toLowerCase() !== "cliente" ? pedaco.slice(0, 24) : undefined;
+  const oi = nome === undefined ? "Oii!" : `Oii, ${nome}!`;
+  if (dados.movimentos.length === 0) {
+    return `${oi} Seu saldo é R$ ${dados.saldo}. Hoje ainda não teve movimentação. O que você precisa?`;
+  }
+  const limite = dados.movimentos.slice(-8);
+  const linhas = limite.map((item) => {
+    const hora = Number.isFinite(Date.parse(item.em)) ? dataHoraBrasil(new Date(item.em)).hora : "";
+    const tipo = ROTULO_TIPO[item.tipo] ?? item.tipo;
+    const horaTxt = hora.length > 0 ? `${hora} ` : "";
+    return `${horaTxt}${tipo} R$ ${item.valor}`;
+  });
+  const extra =
+    dados.movimentos.length > limite.length
+      ? `\n…e mais ${dados.movimentos.length - limite.length} neste dia.`
+      : "";
+  return `${oi} Seu saldo é R$ ${dados.saldo}.\n\nMovimentação de hoje:\n${linhas.join("\n")}${extra}\n\nO que você precisa?`;
+}
 
 export const RESPOSTA_SEM_CONTA =
   "A conta ainda não está aberta. Envie /start e responda CONCORDO para concluir a abertura. Deseja que eu explique os termos?";

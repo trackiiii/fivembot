@@ -12,8 +12,10 @@ import {
   RESPOSTA_COMPROVANTE,
   RESPOSTA_DEPOSITO_PENDENTE,
   RESPOSTA_SEM_CONTA,
+  movimentosDoDia,
   respostaContaAberta,
   respostaSaldo,
+  respostaStartComConta,
 } from "../lib/respostas.js";
 import {
   type Atualizacao,
@@ -185,7 +187,10 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     return;
   }
   if (existente !== undefined && decisao === "pedir") {
-    await enviarPadrao(deps.kv, atualizacao, RESPOSTA_AJUDA);
+    const texto = comando(atualizacao.texto, "start")
+      ? await textoStartConta(deps.kv, atualizacao)
+      : RESPOSTA_AJUDA;
+    await enviarPadrao(deps.kv, atualizacao, texto);
     return;
   }
   const abriuAgora = existente === undefined && decisao === "concordo";
@@ -298,6 +303,16 @@ async function atalhoCarteira(
   if (!foto) await enviarTexto(atualizacao.chatId, caption, atualizacao.mensagemId);
   await registrarTroca(deps.kv, atualizacao.chatId, atualizacao.nome, atualizacao.texto, caption, "padrao");
   return true;
+}
+
+async function textoStartConta(kv: HostKvApi, atualizacao: MensagemRecebida): Promise<string> {
+  const lista = await operarConta(kv, atualizacao.chatId, `start:${atualizacao.updateId}`, { acao: "extrato" });
+  if (lista.ok !== true || lista.saldo === undefined) return RESPOSTA_AJUDA;
+  return respostaStartComConta({
+    nome: atualizacao.nome,
+    saldo: lista.saldo,
+    movimentos: movimentosDoDia(lista.extrato ?? []),
+  });
 }
 
 async function textoContaAberta(kv: HostKvApi, atualizacao: MensagemRecebida): Promise<string> {

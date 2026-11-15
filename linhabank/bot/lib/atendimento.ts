@@ -403,7 +403,7 @@ export async function mostrarDigitando(chatId: string): Promise<void> {
 
 export async function configurarPerfil(): Promise<boolean> {
   const comandos = [
-    { command: "start", description: "Começar o atendimento com a Thialinha" },
+    { command: "start", description: "Começar, ou ver saldo e o movimento de hoje" },
     { command: "ajuda", description: "Ver como a Thialinha pode ajudar" },
     { command: "agendamentos", description: "Ver os PIX agendados" },
     { command: "saldo", description: "Ver o saldo da conta" },

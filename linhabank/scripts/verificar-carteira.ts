@@ -25,6 +25,7 @@ const { aceitarTermos, bloquearConta, confirmarCobrancaSandbox, creditarPixReceb
 const { montarCopiaECola } = await import("../bot/lib/brcode.js");
 const { interpretarAtualizacao } = await import("../bot/lib/atendimento.js");
 const { sqlDisponivel } = await import("../bot/lib/db.js");
+const { movimentosDoDia, respostaStartComConta } = await import("../bot/lib/respostas.js");
 
 function assert(condicao: boolean, mensagem: string): void {
   if (!condicao) throw new Error(mensagem);
@@ -159,6 +160,41 @@ async function saldoDe(kv: HostKvApi, chatId: string): Promise<number> {
   assert(deposito.destino !== undefined, "sandbox sem cobrança");
   const pago = await confirmarCobrancaSandbox(kv, deposito.destino ?? "");
   assert(pago.estado === "novo" && (await saldoDe(kv, "5")) === 800, "sandbox não creditou pelo endpoint interno");
+}
+
+{
+  const kv = kvMemoria();
+  const conta = await abrir(kv, "start-1");
+  const vazio = await operarConta(kv, "start-1", "start-vazio", { acao: "extrato" });
+  const textoVazio = respostaStartComConta({
+    nome: "Ana Silva",
+    saldo: vazio.saldo ?? "",
+    movimentos: movimentosDoDia(vazio.extrato ?? []),
+  });
+  assert(textoVazio.includes("0,00"), "start sem saldo do backend");
+  assert(/não teve movimentação/i.test(textoVazio), "start sem movimento do dia não avisou");
+  await creditarPixRecebido(kv, {
+    id: "cred-start-1",
+    referencia: conta.referencia,
+    valorCentavos: 2550,
+    endToEndId: "E2ESTART1",
+  });
+  const lista = await operarConta(kv, "start-1", "start-dia", { acao: "extrato" });
+  const ontem = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
+  const filtrado = movimentosDoDia([
+    ...(lista.extrato ?? []),
+    { em: ontem, tipo: "pix_enviado", valor: "9,00", descricao: "ontem" },
+  ]);
+  assert(filtrado.some((item) => item.valor === "25,50"), "start não pegou o movimento de hoje");
+  assert(!filtrado.some((item) => item.valor === "9,00"), "start misturou movimento de outro dia");
+  const texto = respostaStartComConta({
+    nome: "Ana Silva",
+    saldo: lista.saldo ?? "",
+    movimentos: filtrado,
+  });
+  assert(texto.includes("25,50"), "start não falou o valor de hoje");
+  assert(texto.includes("Ana"), "start sem nome");
+  assert(!texto.includes("9,00"), "start citou movimento antigo");
 }
 
 assert(sqlDisponivel() === false, "SQL ligou sem configuração");
