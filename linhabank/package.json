@@ -5,14 +5,21 @@
   "description": "Atendimento do LinhaBank com a Thialinha no Telegram.",
   "scripts": {
     "check": "tsc --noEmit",
-    "dev": "agent-sdk dev"
+    "dev": "agent-sdk dev",
+    "test": "node ./node_modules/tsx/dist/cli.mjs scripts/verificar-agenda.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-pix.ts && node ./node_modules/tsx/dist/cli.mjs scripts/verificar-carteira.ts",
+    "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@grok/agent-sdk": "^0.6.0",
+    "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.6",
     "typescript": "6.0.3"
   }
 }

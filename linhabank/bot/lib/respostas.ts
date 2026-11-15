@@ -1,5 +1,5 @@
 export const RESPOSTA_AJUDA =
-  "Sua conta LinhaBank está ativa. Posso consultar saldo e extrato, enviar PIX, agendar PIX, transferir entre contas LinhaBank, pagar boleto ou bloquear o cartão virtual. O que você precisa?";
+  "Sua conta LinhaBank está ativa. Posso consultar saldo e extrato, receber depósito no PIX, enviar PIX, agendar PIX, transferir entre contas LinhaBank, pagar boleto ou bloquear o cartão virtual. O que você precisa?";
 
 export const RESPOSTA_SEM_CONTA =
   "A conta ainda não está aberta. Envie /start e responda CONCORDO para concluir a abertura. Deseja que eu explique os termos?";
@@ -12,6 +12,12 @@ export const RESPOSTA_DESTINO_INTERNO =
 
 export const RESPOSTA_SEGREDO =
   "Não envie senha, código ou dados do cartão neste atendimento. Não repita esse dado aqui.";
+
+export const RESPOSTA_COMPROVANTE =
+  "Foto ou arquivo de comprovante não credita saldo. O valor só entra quando o pagamento é confirmado. Quer gerar um QR Code para depositar?";
+
+export const RESPOSTA_DEPOSITO_PENDENTE =
+  "Ainda não consigo gerar o PIX de depósito. O saldo permanece o mesmo. Deseja tentar de novo mais tarde?";
 
 export function respostaContaAberta(dados: {
   agencia: string;

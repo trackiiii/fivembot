@@ -22,7 +22,7 @@ function carregarEnvLocal(): void {
     const igual = limpa.indexOf("=");
     if (igual <= 0) continue;
     const chave = limpa.slice(0, igual).trim();
-    if (!/^(?:TELEGRAM|PIX_GATEWAY|PIX_TAXA)_[A-Z0-9_]+$/.test(chave)) continue;
+    if (!/^(?:TELEGRAM|PIX_GATEWAY|PIX_TAXA|PIX_RECEBIMENTO|LINHABANK|ADMIN)_[A-Z0-9_]+$/.test(chave)) continue;
     if (process.env[chave] !== undefined && process.env[chave] !== "") continue;
     let valor = limpa.slice(igual + 1).trim();
     if (
@@ -60,6 +60,7 @@ export type EstadoTelegram = {
 export type Atualizacao =
   | { tipo: "ignorar" }
   | { tipo: "sem_texto"; chatId: string; mensagemId: number; nome: string; updateId: number }
+  | { tipo: "comprovante"; chatId: string; mensagemId: number; nome: string; updateId: number }
   | {
       tipo: "texto";
       chatId: string;
@@ -81,6 +82,9 @@ export type Atualizacao =
 const mensagemSchema = z.object({
   message_id: z.number().int(),
   text: z.string().optional(),
+  caption: z.string().optional(),
+  photo: z.array(z.unknown()).optional(),
+  document: z.unknown().optional(),
   from: z
     .object({
       first_name: z.string().optional(),
@@ -199,7 +203,10 @@ export function interpretarAtualizacao(corpo: unknown): Atualizacao {
     nome: nomeSeguro(mensagem.from?.first_name),
     updateId: lido.data.update_id,
   };
-  const texto = cortar(mensagem.text ?? "", LIMITE_MENSAGEM);
+  const texto = cortar(mensagem.text ?? mensagem.caption ?? "", LIMITE_MENSAGEM);
+  if ((mensagem.photo !== undefined && mensagem.photo.length > 0) || mensagem.document !== undefined) {
+    return { tipo: "comprovante", ...base };
+  }
   if (texto.length === 0) return { tipo: "sem_texto", ...base };
   return { tipo: "texto", ...base, texto };
 }
@@ -350,6 +357,26 @@ async function chamarTelegram(metodo: string, corpo: Record<string, unknown>): P
   }
 }
 
+export async function enviarFoto(chatId: string, png: Uint8Array, caption: string): Promise<boolean> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (token === undefined || token.length === 0) return false;
+  try {
+    const form = new FormData();
+    form.set("chat_id", chatId);
+    form.set("caption", caption.slice(0, 1024));
+    form.set("photo", new Blob([Buffer.from(png)], { type: "image/png" }), "pix.png");
+    const resposta = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(15000),
+    });
+    const corpo = (await resposta.json().catch(() => null)) as { ok?: boolean } | null;
+    return resposta.ok && corpo?.ok === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function enviarTexto(
   chatId: string,
   texto: string,
@@ -379,6 +406,9 @@ export async function configurarPerfil(): Promise<boolean> {
     { command: "start", description: "Começar o atendimento com a Thialinha" },
     { command: "ajuda", description: "Ver como a Thialinha pode ajudar" },
     { command: "agendamentos", description: "Ver os PIX agendados" },
+    { command: "saldo", description: "Ver o saldo da conta" },
+    { command: "extrato", description: "Ver o histórico da conta" },
+    { command: "depositar", description: "Gerar QR Code para depósito PIX" },
   ];
   const nome = await chamarTelegram("setMyName", { name: "LinhaBank" });
   if (!nome) return false;

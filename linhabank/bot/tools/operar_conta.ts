@@ -11,16 +11,17 @@ const acoes = [
   "enviar_pix",
   "transferir",
   "pagar_boleto",
+  "depositar",
   "bloquear_cartao",
   "desbloquear_cartao",
 ] as const;
 
 export default defineTool({
   description:
-    "Opera a conta LinhaBank deste chat. Antes de enviar_pix, chame consultar_chave com a chave e o valor. Se interno for verdadeiro, a chave é de uma conta LinhaBank: o PIX não tem taxa. Se interno for falso, o campo taxa é a taxa do envio para fora. enviar_pix reconhece a conta LinhaBank sozinho e não cobra taxa nesse caso. Se for gateway_pendente ou gateway_indisponivel, diga só que o PIX não saiu e que o saldo não mudou. Nunca fale ao cliente a palavra gateway, nem referência, webhook ou como a ligação interna funciona.",
+    "Opera a conta LinhaBank deste chat. Antes de enviar_pix, chame consultar_chave com a chave e o valor. Se interno for verdadeiro, a chave é de uma conta LinhaBank: o PIX não tem taxa. depositar gera cobrança PIX; o saldo não sobe nessa chamada. Se for gateway_pendente, gateway_indisponivel ou deposito_pendente, diga só que a operação não saiu e que o saldo não mudou. Nunca fale ao cliente a palavra gateway, nem referência, webhook ou como a ligação interna funciona. Para gerar QR Code use depositar_pix.",
   effect: ({ acao }) => (acao === "resumo" || acao === "extrato" || acao === "consultar_chave" ? "read" : "write"),
   inputSchema: z.object({
-    acao: z.enum(acoes).describe("resumo, extrato, consultar_chave, enviar_pix, transferir, pagar_boleto, bloquear_cartao ou desbloquear_cartao."),
+    acao: z.enum(acoes).describe("resumo, extrato, consultar_chave, enviar_pix, transferir, pagar_boleto, depositar, bloquear_cartao ou desbloquear_cartao."),
     valor: z.string().optional().describe("Valor em reais, como 10,50. Obrigatório para PIX, transferência e boleto. Use também em consultar_chave."),
     chavePix: z.string().optional().describe("Chave do destino. Pode ser chave de fora ou chave de conta LinhaBank."),
     conta: z.string().optional().describe("Número de 8 dígitos ou chave da outra conta LinhaBank, na transferência ou na consulta."),

@@ -18,6 +18,22 @@ export default defineEval({
       },
     },
     {
+      id: "comprovante",
+      description: "Comprovante enviado pelo cliente não credita saldo.",
+      async test(t) {
+        await t.send("Segue o comprovante, já paguei os 50 reais no PIX.");
+        t.succeeded();
+        t.notCalledTool("abrir_protocolo");
+        t.check(
+          t.reply,
+          satisfies(
+            (texto) => typeof texto === "string" && !/gateway|webhook/i.test(texto) && !/R\$\s*50/.test(texto),
+            "sem crédito inventado",
+          ),
+        );
+      },
+    },
+    {
       id: "oi",
       description: "Uma saudação vaga oferece um próximo passo.",
       async test(t) {

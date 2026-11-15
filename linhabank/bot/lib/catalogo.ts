@@ -13,7 +13,8 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
     fatos: [
       "Cada pessoa que aceita os termos abre a própria conta neste chat. O saldo e o extrato ficam no LinhaBank.",
       "Agência 0001, o número e a chave interna servem só para transferência entre contas LinhaBank.",
-      "A conta abre com saldo zero. O saldo sobe quando entra um PIX.",
+      "A conta abre com saldo zero. O saldo sobe quando um depósito PIX é confirmado ou quando outra conta LinhaBank envia um valor.",
+      "Depósito via PIX usa QR Code e código copia e cola. Foto de comprovante não credita saldo.",
     ],
   },
   pix: {
@@ -25,6 +26,7 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
       "A chave LinhaBank não serve para outros bancos.",
       "PIX para fora do LinhaBank pode ter taxa. A taxa vigente é informada antes da confirmação. Sem taxa configurada, o valor da taxa é zero.",
       "A Thialinha confirma o PIX enviado com o comprovante quando ele existe.",
+      "O cliente deposita gerando um QR Code neste chat. O saldo só muda depois da confirmação do pagamento.",
       "Cada envio neste chat vai até R$ 5.000,00.",
       "Um PIX pode ser agendado para um horário, uma vez, todo dia, toda semana ou todo mês. Depois de confirmado, o envio acontece sozinho até o cliente cancelar.",
       "O cliente cancela um PIX agendado neste chat, informando o código do agendamento.",
@@ -52,6 +54,7 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
       "O LinhaBank não pede senha, PIN, código SMS, token, CVV nem foto de documento neste chat.",
       "Se o cliente enviar um desses dados, oriente a não repetir o dado neste chat.",
       "Este chat não envia link de pagamento.",
+      "Comprovante enviado pelo cliente, em foto ou texto, não altera o saldo.",
     ],
   },
 };

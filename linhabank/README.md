@@ -1,37 +1,77 @@
-# LinhaBank
+# LINHABANK
 
-Bot de Telegram do LinhaBank. O atendimento é um diálogo com a Thialinha, atendente IA.
+Carteira digital em BRL, com atendimento público no Telegram pelo bot [@linhabank_bot](https://t.me/linhabank_bot). A Thialinha é a atendente IA. O dinheiro da conta não vive no modelo: saldo, ledger e PIX passam pelas ferramentas do servidor.
 
-Cada pessoa que concorda com os termos abre a própria conta no LinhaBank. O saldo e o extrato ficam nessa conta. Agência, número e chave interna servem para transferência entre contas LinhaBank. A gateway só envia e recebe PIX.
+Este projeto **não está em produção**. Enquanto o gateway Pix, a segurança e a estrutura regulatória não estiverem prontos, o modo padrão é `sandbox`. Não processe dinheiro real nesse estado.
 
-## Segredos
+## O que já funciona
 
-O nome do segredo fica no projeto. O valor fica fora do git.
+- Cadastro por `/start` e aceite dos termos, com uma carteira por chat.
+- Saldo e extrato da própria conta.
+- PIX entre contas LinhaBank, reconhecido pela chave `lb…@linhabank` ou pelo número, sem taxa.
+- PIX para fora pela gateway, quando `PIX_GATEWAY_URL` e `PIX_GATEWAY_TOKEN` existem. A taxa é `PIX_TAXA_CENTAVOS` + `PIX_TAXA_PERCENTUAL` (zero se não configurada).
+- Depósito PIX com QR Code e copia e cola. O saldo **não** sobe na geração. Sobe só no webhook do provedor, ou no simulador de sandbox.
+- Histórico no ledger (lançamentos não são apagados). Comprovante `LB-…` em cada movimentação.
+- Transferência, boleto, cartão virtual, PIX agendado e protocolo.
+- Painel admin em `/v1/channels/admin/painel`.
+- Foto de comprovante **não** credita saldo.
 
-- `TELEGRAM_BOT_TOKEN`: token do @BotFather. No BotFather, o nome do bot é LinhaBank.
-- `TELEGRAM_WEBHOOK_SECRET`: segredo do webhook. Use de 1 a 256 caracteres entre letras, números, `_` e `-`.
-- `PIX_GATEWAY_URL`: endereço HTTPS da gateway. Enquanto estiver vazio, o PIX não sai.
-- `PIX_GATEWAY_TOKEN`: token que o LinhaBank envia para a gateway.
-- `PIX_GATEWAY_WEBHOOK_SECRET`: segredo do aviso de PIX recebido.
+## O que ainda não está pronto para dinheiro real
 
-Quando a URL existir, inclua o domínio dela em `hosting.egressDomains` de `bot/agent.ts`.
+- Não há PSP Pix de produção ligado. O adaptador HTTP fala com o contrato `POST /v1/pix/enviar` já usado pelo bot. A cobrança de depósito é um BR Code local.
+- PostgreSQL só entra com `DATABASE_URL`. Sem isso, o ledger fica no KV persistente do Agent SDK.
+- Não há licença, KYC completo nem conta de liquidação. Sandbox não substitui isso.
 
-O envio é `POST /v1/pix/enviar`, com `Authorization: Bearer`. O corpo leva `id`, `referencia`, `valorCentavos` e `chaveDestino`. Não leva agência, número nem chave interna. A resposta de sucesso traz `endToEndId`. O LinhaBank só debita o saldo depois dessa resposta.
+## Como executar
 
-O aviso de PIX recebido entra em `POST /v1/channels/pix/recebido`, no cabeçalho `X-Linhabank-Gateway-Token`. O corpo leva `id`, `referencia`, `valorCentavos` e, se houver, `pagador` e `endToEndId`. A `referencia` identifica a conta. Esse aviso credita o saldo e entra no extrato do LinhaBank.
-
-Grave os valores em `.env.local` nesta pasta. Esse arquivo não entra no git. O processo também aceita as mesmas variáveis no ambiente. Uma variável já definida no ambiente vale mais que o arquivo.
-
-## Teste local
+No diretório `linhabank`:
 
 ```bash
+# testes financeiros e de agenda
+npm test
+
+# checagem de tipos
+npm run check
+
+# bot local, escutando o Telegram
 TELEGRAM_POLL=1 npx @grok/agent-sdk dev --dir . --mode single
 ```
 
-`TELEGRAM_POLL=1` faz a Thialinha buscar as mensagens no Telegram. Sem isso, o Telegram entrega no webhook.
+Grave os valores em `.env.local` (o arquivo não entra no git):
 
-O playground abre em http://127.0.0.1:3000/playground.
+| Variável | Função |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Token do @linhabank_bot |
+| `TELEGRAM_WEBHOOK_SECRET` | Segredo do webhook do Telegram |
+| `CURSOR_API_KEY` | Chave do modelo, só no ambiente |
+| `PIX_GATEWAY_URL` | HTTPS da gateway. Vazio = PIX para fora não sai |
+| `PIX_GATEWAY_TOKEN` | Token enviado à gateway |
+| `PIX_GATEWAY_WEBHOOK_SECRET` | Segredo do aviso de PIX recebido |
+| `PIX_RECEBIMENTO_CHAVE` | Chave Pix da cobrança de depósito |
+| `PIX_TAXA_CENTAVOS` | Taxa fixa do PIX para fora |
+| `PIX_TAXA_PERCENTUAL` | Percentual do PIX para fora |
+| `LINHABANK_MODO` | `sandbox` (padrão) ou `live` |
+| `ADMIN_TOKEN` | Segredo do painel admin |
+| `DATABASE_URL` | PostgreSQL. Sem isso, o ledger usa o KV |
+| `LINHABANK_DB_PATH` | PGlite em arquivo, para teste local com SQL |
 
-O webhook local fica em `POST /v1/channels/telegram/webhook`. Um exemplo está em `fixtures/ola.json`.
+Comando úteis no Telegram: `/start`, `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`.
 
-No endereço publicado, aponte o webhook para `$AGENT_ALIAS_URL/v1/channels/telegram/webhook` e envie o segredo no cabeçalho `X-Telegram-Bot-Api-Secret-Token`. Não use `TELEGRAM_POLL=1` junto com o webhook.
+## Webhooks
+
+- Telegram: `POST /v1/channels/telegram/webhook`
+- PIX recebido: `POST /v1/channels/pix/recebido` com `X-Linhabank-Gateway-Token`
+- Admin: `GET /v1/channels/admin/painel` com `X-Linhabank-Admin-Token`
+- Simular pagamento (só sandbox): `POST /v1/channels/admin/sandbox/pagar` `{ "cobrancaId": "dep-…" }`
+
+O corpo do PIX recebido leva `id` (idempotente), `valorCentavos` e um destes: `txid` / `cobrancaId` da cobrança, ou `referencia` da conta. Valor diferente da cobrança é recusado. O LinhaBank não credita porque o cliente enviou comprovante.
+
+## Ledger e banco
+
+Os lançamentos são imutáveis. Estorno de PIX recusado pela gateway vira um crédito novo, não uma exclusão. Transferência entre contas trava as duas contas, debita e credita na mesma transação.
+
+Com `DATABASE_URL`, rode `npm run migrate` e o schema em `migrations/`. Sem Postgres, o mesmo modelo roda no KV, com trava por conta.
+
+## Publicação
+
+O webhook publicado fica em `$AGENT_ALIAS_URL/v1/channels/telegram/webhook`. Não use `TELEGRAM_POLL=1` junto com o webhook. Inclua o domínio da gateway em `hosting.egressDomains` de `bot/agent.ts`.

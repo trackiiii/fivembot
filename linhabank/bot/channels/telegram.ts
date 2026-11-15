@@ -5,7 +5,15 @@ import * as z from "zod/v4";
 
 import { comandoAgendamentos, listarAgendamentos, processarAgendamentos } from "../lib/agenda.js";
 import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } from "../lib/banco.js";
-import { RESPOSTA_AJUDA, RESPOSTA_SEM_CONTA, respostaContaAberta } from "../lib/respostas.js";
+import { pngCopiaECola } from "../lib/qr.js";
+import {
+  RESPOSTA_AJUDA,
+  RESPOSTA_COMPROVANTE,
+  RESPOSTA_DEPOSITO_PENDENTE,
+  RESPOSTA_SEM_CONTA,
+  respostaContaAberta,
+  respostaSaldo,
+} from "../lib/respostas.js";
 import {
   type Atualizacao,
   type EstadoTelegram,
@@ -14,6 +22,7 @@ import {
   chaveEntrega,
   chaveUpdate,
   configurarPerfil,
+  enviarFoto,
   enviarTermos,
   enviarTexto,
   gravarOffset,
@@ -117,6 +126,13 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     await responderSemTexto(deps.kv, atualizacao);
     return;
   }
+  if (atualizacao.tipo === "comprovante") {
+    const ok = await enviarTexto(atualizacao.chatId, RESPOSTA_COMPROVANTE, atualizacao.mensagemId);
+    if (ok) {
+      await registrarTroca(deps.kv, atualizacao.chatId, atualizacao.nome, "[comprovante]", RESPOSTA_COMPROVANTE, "padrao");
+    }
+    return;
+  }
 
   if (atualizacao.tipo === "callback") {
     await responderCallback(atualizacao.callbackId);
@@ -148,6 +164,7 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     await enviarPadrao(deps.kv, atualizacao, lista.texto);
     return;
   }
+  if (await atalhoCarteira(deps, atualizacao, existente !== undefined)) return;
   if (existente === undefined && decisao === "pedir") {
     await enviarTermos(atualizacao.chatId, atualizacao.mensagemId);
     return;
@@ -167,6 +184,65 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
     return;
   }
   await falar(deps, atualizacao, atualizacao.texto, false);
+}
+
+function comando(texto: string, nome: string): boolean {
+  const limpo = texto.trim().toLowerCase();
+  return limpo === `/${nome}` || limpo.startsWith(`/${nome}@`) || limpo.startsWith(`/${nome} `);
+}
+
+function valorDoComando(texto: string): string | undefined {
+  const limpo = texto.trim().replace(/^\/\S+\s*/, "");
+  return limpo.length > 0 ? limpo : undefined;
+}
+
+async function atalhoCarteira(
+  deps: Despacho,
+  atualizacao: Extract<MensagemRecebida, { tipo: "texto" }>,
+  temConta: boolean,
+): Promise<boolean> {
+  const saldo = comando(atualizacao.texto, "saldo");
+  const extrato = comando(atualizacao.texto, "extrato");
+  const depositar = comando(atualizacao.texto, "depositar");
+  if (!saldo && !extrato && !depositar) return false;
+  if (!temConta) {
+    await enviarTexto(atualizacao.chatId, RESPOSTA_SEM_CONTA, atualizacao.mensagemId);
+    return true;
+  }
+  if (saldo) {
+    const resumo = await operarConta(deps.kv, atualizacao.chatId, `saldo:${atualizacao.updateId}`, { acao: "resumo" });
+    await enviarPadrao(deps.kv, atualizacao, respostaSaldo(resumo.saldo ?? "0,00"));
+    return true;
+  }
+  if (extrato) {
+    const lista = await operarConta(deps.kv, atualizacao.chatId, `extrato:${atualizacao.updateId}`, { acao: "extrato" });
+    const linhas = (lista.extrato ?? []).map((item) => `${item.em}: ${item.tipo} R$ ${item.valor} ${item.descricao}`);
+    const texto =
+      linhas.length === 0
+        ? `Saldo: R$ ${lista.saldo ?? "0,00"}. Ainda não há movimentação. Quer depositar?`
+        : `Saldo: R$ ${lista.saldo ?? "0,00"}. ${linhas.join(" ")}`;
+    await enviarPadrao(deps.kv, atualizacao, texto);
+    return true;
+  }
+  const valor = valorDoComando(atualizacao.texto);
+  if (valor === undefined) {
+    await enviarPadrao(deps.kv, atualizacao, "Qual valor você quer depositar?");
+    return true;
+  }
+  const deposito = await operarConta(deps.kv, atualizacao.chatId, `deposito:${atualizacao.updateId}:${valor}`, {
+    acao: "depositar",
+    valor,
+  });
+  if (!deposito.ok || deposito.copiaECola === undefined) {
+    await enviarPadrao(deps.kv, atualizacao, RESPOSTA_DEPOSITO_PENDENTE);
+    return true;
+  }
+  const caption = `Depósito de R$ ${deposito.valor}. Pague este PIX. O saldo só entra depois da confirmação. Código copia e cola:\n${deposito.copiaECola}`;
+  const png = await pngCopiaECola(deposito.copiaECola);
+  const foto = await enviarFoto(atualizacao.chatId, png, caption);
+  if (!foto) await enviarTexto(atualizacao.chatId, caption, atualizacao.mensagemId);
+  await registrarTroca(deps.kv, atualizacao.chatId, atualizacao.nome, atualizacao.texto, caption, "padrao");
+  return true;
 }
 
 async function textoContaAberta(kv: HostKvApi, atualizacao: MensagemRecebida): Promise<string> {
