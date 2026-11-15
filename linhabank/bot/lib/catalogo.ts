@@ -11,18 +11,18 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
   conta: {
     titulo: "Conta LinhaBank",
     fatos: [
-      "Cada pessoa que aceita os termos abre a própria conta neste chat, com agência 0001, número, chave PIX e cartão virtual.",
-      "O saldo de cada conta fica na gateway de PIX. A Thialinha só fala o saldo que a gateway devolver para aquela conta.",
-      "Sem a gateway ligada, não existe número de saldo para informar.",
+      "Cada pessoa que aceita os termos abre a própria conta neste chat. O saldo e o extrato ficam no LinhaBank.",
+      "Agência 0001, o número e a chave interna servem só para transferência entre contas LinhaBank.",
+      "A conta abre com saldo zero. O saldo sobe quando entra um PIX pela gateway.",
     ],
   },
   pix: {
     titulo: "PIX LinhaBank",
     fatos: [
-      "O PIX funciona 24 horas, inclusive fim de semana, quando a gateway está ligada.",
-      "Enviar e receber PIX passa pela gateway, na conta de quem é o dono.",
-      "A Thialinha confirma o PIX só com o endToEndId que a gateway devolver.",
-      "Cada envio neste chat vai até R$ 5.000,00. A gateway pode recusar antes disso.",
+      "Enviar e receber PIX passa pela gateway. O saldo debitado ou creditado é o do LinhaBank.",
+      "A chave interna, a agência e o número da conta não são chave PIX para outros bancos.",
+      "A Thialinha confirma o PIX enviado só com o endToEndId da gateway.",
+      "Cada envio neste chat vai até R$ 5.000,00.",
     ],
   },
   cartao: {

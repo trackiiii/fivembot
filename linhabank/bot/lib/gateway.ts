@@ -31,49 +31,14 @@ function carregarGatewayLocal(): void {
   }
 }
 
-export type LancamentoGateway = {
-  em: string;
-  tipo: string;
-  valorCentavos: number;
-  descricao: string;
-};
-
-export type ContaGateway = {
-  agencia: string;
-  numero: string;
-  chavePix: string;
-  nome: string;
-};
-
-export type RespostaGateway =
-  | {
-      ok: true;
-      saldoCentavos: number;
-      extrato?: LancamentoGateway[];
-      endToEndId?: string;
-    }
-  | {
-      ok: false;
-      motivo: "gateway_pendente" | "gateway_indisponivel" | "saldo_insuficiente" | "destino_invalido" | "recusado";
-      saldoCentavos?: number;
-    };
+export type RespostaEnvio =
+  | { ok: true; endToEndId: string }
+  | { ok: false; motivo: "gateway_pendente" | "gateway_indisponivel" | "destino_invalido" | "recusado" };
 
 const respostaSchema = z.object({
   ok: z.boolean(),
   motivo: z.string().optional(),
-  saldoCentavos: z.number().int().optional(),
-  endToEndId: z.string().max(80).optional(),
-  extrato: z
-    .array(
-      z.object({
-        em: z.string().max(40),
-        tipo: z.string().max(40),
-        valorCentavos: z.number().int(),
-        descricao: z.string().max(80),
-      }),
-    )
-    .max(20)
-    .optional(),
+  endToEndId: z.string().min(6).max(80).optional(),
 });
 
 function urlBase(): string | undefined {
@@ -93,23 +58,17 @@ export function gatewayConfigurada(): boolean {
   return urlBase() !== undefined && token.length > 0;
 }
 
-function saldoValido(valor: number | undefined): valor is number {
-  return valor !== undefined && Number.isSafeInteger(valor) && valor >= 0 && valor <= 100_000_000_000;
-}
-
-function motivoConhecido(motivo: string | undefined): RespostaGateway & { ok: false } {
-  if (motivo === "saldo_insuficiente" || motivo === "destino_invalido") {
-    return { ok: false, motivo };
-  }
-  return { ok: false, motivo: "recusado" };
-}
-
-async function chamar(caminho: string, corpo: Record<string, unknown>): Promise<RespostaGateway> {
+export async function enviarPixGateway(pedido: {
+  id: string;
+  referencia: string;
+  valorCentavos: number;
+  chaveDestino: string;
+}): Promise<RespostaEnvio> {
   const base = urlBase();
   const token = process.env.PIX_GATEWAY_TOKEN?.trim() ?? "";
   if (base === undefined || token.length === 0) return { ok: false, motivo: "gateway_pendente" };
   try {
-    const resposta = await fetch(`${base}${caminho}`, {
+    const resposta = await fetch(`${base}/v1/pix/enviar`, {
       method: "POST",
       redirect: "error",
       signal: AbortSignal.timeout(15000),
@@ -117,85 +76,23 @@ async function chamar(caminho: string, corpo: Record<string, unknown>): Promise<
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(corpo),
+      body: JSON.stringify({
+        id: pedido.id,
+        referencia: pedido.referencia,
+        valorCentavos: pedido.valorCentavos,
+        chaveDestino: pedido.chaveDestino,
+      }),
     });
     const json = await resposta.json().catch(() => null);
     const lido = respostaSchema.safeParse(json);
     if (!resposta.ok || !lido.success) return { ok: false, motivo: "gateway_indisponivel" };
-    const saldo = saldoValido(lido.data.saldoCentavos) ? lido.data.saldoCentavos : undefined;
     if (lido.data.ok) {
-      if (saldo === undefined) return { ok: false, motivo: "gateway_indisponivel" };
-      return {
-        ok: true,
-        saldoCentavos: saldo,
-        endToEndId: lido.data.endToEndId,
-        extrato: lido.data.extrato?.map((item) => ({
-          em: item.em,
-          tipo: item.tipo,
-          valorCentavos: item.valorCentavos,
-          descricao: item.descricao,
-        })),
-      };
+      if (lido.data.endToEndId === undefined) return { ok: false, motivo: "gateway_indisponivel" };
+      return { ok: true, endToEndId: lido.data.endToEndId };
     }
-    const falha = motivoConhecido(lido.data.motivo);
-    if (saldo !== undefined) falha.saldoCentavos = saldo;
-    return falha;
+    if (lido.data.motivo === "destino_invalido") return { ok: false, motivo: "destino_invalido" };
+    return { ok: false, motivo: "recusado" };
   } catch {
     return { ok: false, motivo: "gateway_indisponivel" };
   }
-}
-
-export function consultarSaldo(conta: ContaGateway): Promise<RespostaGateway> {
-  return chamar("/v1/contas/consultar", {
-    conta: conta.numero,
-    agencia: conta.agencia,
-    chavePix: conta.chavePix,
-    nome: conta.nome,
-  });
-}
-
-export function enviarPixGateway(
-  conta: ContaGateway,
-  id: string,
-  valorCentavos: number,
-  chaveDestino: string,
-): Promise<RespostaGateway> {
-  return chamar("/v1/pix/enviar", {
-    id,
-    conta: conta.numero,
-    agencia: conta.agencia,
-    chavePix: conta.chavePix,
-    nome: conta.nome,
-    valorCentavos,
-    chaveDestino,
-  });
-}
-
-export function transferirGateway(
-  origem: ContaGateway,
-  destino: ContaGateway,
-  id: string,
-  valorCentavos: number,
-): Promise<RespostaGateway> {
-  return chamar("/v1/transferir", {
-    id,
-    contaOrigem: origem.numero,
-    contaDestino: destino.numero,
-    valorCentavos,
-  });
-}
-
-export function pagarBoletoGateway(
-  conta: ContaGateway,
-  id: string,
-  valorCentavos: number,
-  descricao: string,
-): Promise<RespostaGateway> {
-  return chamar("/v1/boleto", {
-    id,
-    conta: conta.numero,
-    agencia: conta.agencia,
-    valorCentavos,
-    descricao,
-  });
 }

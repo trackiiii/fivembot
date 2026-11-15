@@ -2,7 +2,7 @@
 
 Bot de Telegram do LinhaBank. O atendimento é um diálogo com a Thialinha, atendente IA.
 
-Cada pessoa que concorda com os termos abre a própria conta no LinhaBank. O saldo dessa conta fica na gateway de PIX. A Thialinha mostra agência, número, chave e cartão virtual, e só fala um saldo quando a gateway devolve o número daquela conta.
+Cada pessoa que concorda com os termos abre a própria conta no LinhaBank. O saldo e o extrato ficam nessa conta. Agência, número e chave interna servem para transferência entre contas LinhaBank. A gateway só envia e recebe PIX.
 
 ## Segredos
 
@@ -10,13 +10,15 @@ O nome do segredo fica no projeto. O valor fica fora do git.
 
 - `TELEGRAM_BOT_TOKEN`: token do @BotFather. No BotFather, o nome do bot é LinhaBank.
 - `TELEGRAM_WEBHOOK_SECRET`: segredo do webhook. Use de 1 a 256 caracteres entre letras, números, `_` e `-`.
-- `PIX_GATEWAY_URL`: endereço HTTPS da gateway. Enquanto estiver vazio, a Thialinha não mostra saldo nem confirma PIX.
-- `PIX_GATEWAY_TOKEN`: token que a Thialinha envia para a gateway.
+- `PIX_GATEWAY_URL`: endereço HTTPS da gateway. Enquanto estiver vazio, o PIX não sai.
+- `PIX_GATEWAY_TOKEN`: token que o LinhaBank envia para a gateway.
 - `PIX_GATEWAY_WEBHOOK_SECRET`: segredo do aviso de PIX recebido.
 
-Quando a URL existir, inclua o domínio dela em `hosting.egressDomains` de `bot/agent.ts`. A gateway guarda o saldo de cada conta. O LinhaBank guarda de quem é a conta.
+Quando a URL existir, inclua o domínio dela em `hosting.egressDomains` de `bot/agent.ts`.
 
-A gateway recebe `POST /v1/contas/consultar`, `POST /v1/pix/enviar`, `POST /v1/transferir` e `POST /v1/boleto`, com `Authorization: Bearer`. O corpo traz o número da conta. A resposta traz `saldoCentavos` daquela conta. O aviso de PIX recebido entra em `POST /v1/channels/pix/recebido`, no cabeçalho `X-Linhabank-Gateway-Token`. Esse aviso não altera saldo. O saldo continua sendo o da gateway.
+O envio é `POST /v1/pix/enviar`, com `Authorization: Bearer`. O corpo leva `id`, `referencia`, `valorCentavos` e `chaveDestino`. Não leva agência, número nem chave interna. A resposta de sucesso traz `endToEndId`. O LinhaBank só debita o saldo depois dessa resposta.
+
+O aviso de PIX recebido entra em `POST /v1/channels/pix/recebido`, no cabeçalho `X-Linhabank-Gateway-Token`. O corpo leva `id`, `referencia`, `valorCentavos` e, se houver, `pagador` e `endToEndId`. A `referencia` identifica a conta. Esse aviso credita o saldo e entra no extrato do LinhaBank.
 
 Grave os valores em `.env.local` nesta pasta. Esse arquivo não entra no git. O processo também aceita as mesmas variáveis no ambiente. Uma variável já definida no ambiente vale mais que o arquivo.
 

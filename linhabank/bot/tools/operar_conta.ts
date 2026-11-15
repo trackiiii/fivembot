@@ -15,13 +15,13 @@ const acoes = [
 
 export default defineTool({
   description:
-    "Opera a conta LinhaBank deste chat. O saldo e o extrato vêm da gateway de PIX, um para cada conta. Use resumo ou extrato antes de falar saldo, chave, agência ou cartão. Se o motivo for gateway_pendente, diga que a gateway ainda não está ligada e não invente número. enviar_pix, transferir e pagar_boleto só depois que o cliente confirmar valor e destino.",
+    "Opera a conta LinhaBank deste chat. Saldo e extrato são desta conta, no LinhaBank. Agência, número e chaveTransferencia servem só para transferência entre contas LinhaBank. enviar_pix manda para uma chave de fora e só sai pela gateway. Se o motivo for destino_interno, oriente a usar transferir. Se for gateway_pendente, o saldo não mudou.",
   effect: ({ acao }) => (acao === "resumo" || acao === "extrato" ? "read" : "write"),
   inputSchema: z.object({
     acao: z.enum(acoes).describe("resumo, extrato, enviar_pix, transferir, pagar_boleto, bloquear_cartao ou desbloquear_cartao."),
     valor: z.string().optional().describe("Valor em reais, como 10,50. Obrigatório para PIX, transferência e boleto."),
-    chavePix: z.string().optional().describe("Chave PIX de destino, no enviar_pix."),
-    conta: z.string().optional().describe("Número da outra conta LinhaBank, com 8 dígitos, na transferência."),
+    chavePix: z.string().optional().describe("Chave PIX de fora, no enviar_pix. Não use a chave interna do LinhaBank."),
+    conta: z.string().optional().describe("Número de 8 dígitos ou chave interna da outra conta LinhaBank, na transferência."),
     descricao: z.string().optional().describe("Nome do boleto, no pagar_boleto."),
   }),
   async execute(pedido, ctx): Promise<ResultadoOperacao> {
