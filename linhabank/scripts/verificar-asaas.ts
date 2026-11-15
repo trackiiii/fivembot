@@ -275,6 +275,20 @@ assert(rotuloLiquidacao() === "Asaas (produção)", `rotulo ${rotuloLiquidacao()
   assert(repetido.estado === "repetido", "estorno asaas repetiu");
 }
 
+{
+  process.env.LINHABANK_MODO = "sandbox";
+  const kv = kvMemoria();
+  await abrir(kv, "g", 0);
+  const antes = chamadas.length;
+  const deposito = await operarConta(kv, "g", "dep-sandbox-asaas", { acao: "depositar", valor: "12,00" });
+  assert(deposito.ok === true && deposito.copiaECola?.startsWith("000201") === true, "deposito homologacao asaas");
+  assert(
+    chamadas.slice(antes).some((item) => item.url.endsWith("/v3/pix/qrCodes/static")),
+    "homologacao nao gerou QR Asaas",
+  );
+  process.env.LINHABANK_MODO = "live";
+}
+
 assert(avisoDePagamentoAsaas({ event: "PAYMENT_CONFIRMED", payment: { id: "pay_x1234567", value: 10 } }) === undefined, "confirmado creditou");
 assert(lerEventoAsaas({ event: "PING", extra: true }) !== undefined, "evento desconhecido");
 

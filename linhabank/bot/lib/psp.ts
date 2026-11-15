@@ -70,7 +70,7 @@ const asaasPsp: PspAdapter = {
   async cobranca(pedido) {
     const gerada = await cobrancaAsaas(pedido);
     if (!("ok" in gerada)) return gerada;
-    if (emSandbox()) return cobrancaLocal(pedido);
+    if (emSandbox() && gerada.motivo === "chave_ausente") return cobrancaLocal(pedido);
     return gerada;
   },
 };
