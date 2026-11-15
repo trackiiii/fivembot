@@ -602,10 +602,10 @@ export async function lerAtualizacoes(
 }
 
 export const RESPOSTA_SEM_TEXTO =
-  "Consigo ler mensagem de texto. Escreve o que você precisa que eu te ajudo.";
+  "Eu leio texto. Escreve o que você precisa — saldo, PIX, depósito — que eu te ajudo.";
 
 export const AVISO_FALHA =
-  "Tive um problema para responder agora. Manda de novo daqui a pouco que eu te ajudo.";
+  "Travou daqui. Manda de novo daqui a pouco que eu te cubro.";
 
 export async function enviarTermos(chatId: string, mensagemId?: number): Promise<boolean> {
   const termos = comParseHtml(comVozThialinha(TEXTO_TERMOS), true);

@@ -1,7 +1,7 @@
 import { dataHoraBrasil } from "./horario.js";
 
 export const RESPOSTA_AJUDA =
-  "Sua conta LinhaBank está ativa. Posso consultar saldo e extrato, receber depósito no PIX, enviar PIX, agendar PIX, transferir entre contas LinhaBank, pagar boleto ou bloquear o cartão virtual. O que você precisa?";
+  "Tô aqui com a sua conta. Posso ver saldo e extrato, gerar um PIX pra você receber, mandar um PIX, agendar um envio, transferir entre contas LinhaBank, pagar boleto ou bloquear o cartão virtual. Me diz o que a gente faz agora.";
 
 export type ItemExtrato = {
   em: string;
@@ -40,9 +40,9 @@ export function respostaStartComConta(dados: {
 }): string {
   const pedaco = (dados.nome ?? "").trim().split(/\s+/)[0] ?? "";
   const nome = pedaco.length >= 2 && pedaco.toLowerCase() !== "cliente" ? pedaco.slice(0, 24) : undefined;
-  const oi = nome === undefined ? "Oii!" : `Oii, ${nome}!`;
+  const oi = nome === undefined ? "Oi. Tô aqui." : `Oi, ${nome}. Tô aqui.`;
   if (dados.movimentos.length === 0) {
-    return `${oi} Seu saldo é R$ ${dados.saldo}. Hoje ainda não teve movimentação. O que você precisa?`;
+    return `${oi} Seu saldo é R$ ${dados.saldo}. Hoje ainda não teve movimentação. O que a gente resolve?`;
   }
   const limite = dados.movimentos.slice(-8);
   const linhas = limite.map((item) => {
@@ -55,26 +55,26 @@ export function respostaStartComConta(dados: {
     dados.movimentos.length > limite.length
       ? `\n…e mais ${dados.movimentos.length - limite.length} neste dia.`
       : "";
-  return `${oi} Seu saldo é R$ ${dados.saldo}.\n\nMovimentação de hoje:\n${linhas.join("\n")}${extra}\n\nO que você precisa?`;
+  return `${oi} Seu saldo é R$ ${dados.saldo}.\n\nMovimentação de hoje:\n${linhas.join("\n")}${extra}\n\nQuer mandar um PIX, receber, ou era só conferir?`;
 }
 
 export const RESPOSTA_SEM_CONTA =
-  "A conta ainda não está aberta. Envie /start e responda CONCORDO para concluir a abertura. Deseja que eu explique os termos?";
+  "A conta ainda não está aberta neste chat. Manda /start, lê com calma e responde CONCORDO. Aí eu abro a carteira e a gente começa. Quer que eu explique os termos?";
 
 export const RESPOSTA_PIX_INDISPONIVEL =
-  "O PIX não foi enviado. O saldo permanece o mesmo. Deseja tentar novamente?";
+  "O PIX não saiu. O saldo permanece o mesmo, relaxa. Quer tentar de novo agora?";
 
 export const RESPOSTA_DESTINO_INTERNO =
-  "O destino informado é uma conta LinhaBank. Nesse caso, a operação correta é uma transferência. Deseja continuar?";
+  "Essa chave é de uma conta LinhaBank. Nesse caso o PIX vai direto, sem taxa. Quer continuar?";
 
 export const RESPOSTA_SEGREDO =
-  "Não envie senha, código ou dados do cartão neste atendimento. Não repita esse dado aqui.";
+  "Não manda senha, código nem dado de cartão neste chat, tá? Eu não peço isso. Não repete esse dado aqui.";
 
 export const RESPOSTA_COMPROVANTE =
-  "Foto ou arquivo de comprovante não credita saldo. O valor só entra quando o pagamento é confirmado. Quer gerar um QR Code para depositar?";
+  "Eu vi o comprovante, mas foto não coloca dinheiro na conta. O valor só entra quando o pagamento confirma. Quer que eu gere um QR pra depositar?";
 
 export const RESPOSTA_DEPOSITO_PENDENTE =
-  "Ainda não consigo gerar o PIX de depósito. O saldo permanece o mesmo. Deseja tentar de novo mais tarde?";
+  "Não consegui gerar o PIX de depósito agora. O saldo permanece o mesmo. A gente tenta de novo daqui a pouco?";
 
 export function respostaContaAberta(dados: {
   agencia: string;
@@ -82,11 +82,11 @@ export function respostaContaAberta(dados: {
   chave: string;
   saldo: string;
 }): string {
-  return `Sua conta LinhaBank está aberta. Agência ${dados.agencia}, conta ${dados.numero}, chave de transferência ${dados.chave}. Saldo: R$ ${dados.saldo}. Posso consultar o extrato, enviar um PIX ou fazer uma transferência?`;
+  return `Conta aberta, bem-vindo. Agência ${dados.agencia}, conta ${dados.numero}, chave de transferência ${dados.chave}. Saldo: R$ ${dados.saldo}. Quer ver o extrato, mandar um PIX ou receber um?`;
 }
 
 export function respostaSaldo(saldo: string): string {
-  return `O saldo da sua conta é R$ ${saldo}. Deseja ver o extrato?`;
+  return `Seu saldo é R$ ${saldo}. Quer ver o extrato, ou já sabe o que vai fazer?`;
 }
 
 export function respostaPixEnviado(dados: {
@@ -98,27 +98,27 @@ export function respostaPixEnviado(dados: {
   interno?: boolean;
 }): string {
   if (dados.interno) {
-    return `PIX de R$ ${dados.valor} enviado para a conta LinhaBank ${dados.destino}. Sem taxa. Saldo: R$ ${dados.saldo}.`;
+    return `PIX de R$ ${dados.valor} enviado para a conta LinhaBank ${dados.destino}. Sem taxa. Saldo agora: R$ ${dados.saldo}. Quer mandar outro?`;
   }
   const comprovante = dados.comprovante === undefined || dados.comprovante.length === 0 ? "" : ` Comprovante ${dados.comprovante}.`;
   const taxa = dados.taxa === undefined || dados.taxa === "0,00" ? " Sem taxa." : ` Taxa: R$ ${dados.taxa}.`;
-  return `PIX de R$ ${dados.valor} enviado para ${dados.destino}.${comprovante}${taxa} Saldo: R$ ${dados.saldo}.`;
+  return `PIX de R$ ${dados.valor} enviado para ${dados.destino}.${comprovante}${taxa} Saldo agora: R$ ${dados.saldo}.`;
 }
 
 export function respostaTransferencia(dados: { valor: string; destino: string; saldo: string }): string {
-  return `Transferência de R$ ${dados.valor} realizada para a conta ${dados.destino}. Saldo: R$ ${dados.saldo}.`;
+  return `Transferência de R$ ${dados.valor} feita para a conta ${dados.destino}. Saldo agora: R$ ${dados.saldo}. Precisa de mais alguma coisa?`;
 }
 
 export function respostaBoleto(dados: { valor: string; descricao: string; saldo: string }): string {
-  return `Pagamento de R$ ${dados.valor} registrado: ${dados.descricao}. Saldo: R$ ${dados.saldo}.`;
+  return `Paguei o boleto de R$ ${dados.valor}: ${dados.descricao}. Saldo agora: R$ ${dados.saldo}.`;
 }
 
 export function textoDepositoPix(dados: { valor: string; taxa?: string; liquido?: string; copiaECola: string }): string {
   const inclusa =
     dados.taxa !== undefined && dados.taxa !== "0,00"
       ? ` Taxa R$ ${dados.taxa} já inclusa. Entram R$ ${dados.liquido ?? dados.valor} na conta.`
-      : "";
-  return `Depósito de R$ ${dados.valor}.${inclusa} Pague este PIX. O saldo só entra depois da confirmação. Código copia e cola:\n${dados.copiaECola}`;
+      : " O saldo só entra depois da confirmação.";
+  return `Fiz o PIX pra você pagar. São R$ ${dados.valor}.${inclusa}\n\nCopia e cola:\n${dados.copiaECola}\n\nQuando cair, eu te aviso. Não precisa me mandar print.`;
 }
 
 export function respostaPixRecebido(dados: {
@@ -130,10 +130,10 @@ export function respostaPixRecebido(dados: {
 }): string {
   const comprovante = dados.comprovante === undefined || dados.comprovante.length === 0 ? "" : ` Comprovante ${dados.comprovante}.`;
   if (dados.origem !== undefined && dados.origem.length > 0) {
-    return `PIX de R$ ${dados.valor} recebido da conta LinhaBank ${dados.origem}. Saldo: R$ ${dados.saldo}.`;
+    return `Caiu um PIX de R$ ${dados.valor} da conta LinhaBank ${dados.origem}. Saldo agora: R$ ${dados.saldo}.`;
   }
   const taxa = dados.taxa === undefined || dados.taxa === "0,00" ? "" : ` Taxa: R$ ${dados.taxa}.`;
-  return `PIX de R$ ${dados.valor} recebido na sua conta.${taxa} Saldo: R$ ${dados.saldo}.${comprovante}`;
+  return `Caiu um PIX de R$ ${dados.valor} na sua conta.${taxa} Saldo agora: R$ ${dados.saldo}.${comprovante}`;
 }
 
 export function respostaAgendamentoCriado(dados: {
@@ -147,21 +147,21 @@ export function respostaAgendamentoCriado(dados: {
     dados.repeticao === "uma vez"
       ? "O envio será automático nesse horário, salvo cancelamento."
       : "O envio será automático até o cancelamento.";
-  return `PIX de R$ ${dados.valor} para ${dados.destino} agendado: ${dados.repeticao}, próximo envio em ${dados.quando}. ${continuidade} Código ${dados.id}.`;
+  return `Agendei. PIX de R$ ${dados.valor} para ${dados.destino}, ${dados.repeticao}, próximo envio em ${dados.quando}. ${continuidade} Código ${dados.id}. Guarda esse código se quiser cancelar.`;
 }
 
 export function respostaAgendamentoCancelado(dados: { id: string; valor: string; destino: string }): string {
-  return `Agendamento ${dados.id} cancelado. O PIX de R$ ${dados.valor} para ${dados.destino} não será mais enviado.`;
+  return `Cancelei o ${dados.id}. O PIX de R$ ${dados.valor} para ${dados.destino} não será mais enviado.`;
 }
 
 export function respostaListaAgendamentos(
   itens: { id: string; valor: string; destino: string; repeticao: string; quando: string }[],
 ): string {
-  if (itens.length === 0) return "Você não tem PIX agendado. Quer agendar um envio?";
+  if (itens.length === 0) return "Você não tem PIX agendado. Quer que eu marque um envio pra sair sozinho?";
   const linhas = itens.map(
     (item) => `${item.id}: R$ ${item.valor} para ${item.destino}, ${item.repeticao}, próximo em ${item.quando}.`,
   );
-  return `PIX agendados: ${linhas.join(" ")} Para cancelar, informe o código.`;
+  return `PIX agendados: ${linhas.join(" ")} Pra cancelar, me manda o código.`;
 }
 
 export function respostaPixAgendadoEnviado(dados: {
@@ -177,10 +177,10 @@ export function respostaPixAgendadoEnviado(dados: {
   const comprovante = dados.comprovante === undefined || dados.comprovante.length === 0 ? "" : ` Comprovante ${dados.comprovante}.`;
   const taxa = dados.interno || dados.taxa === undefined || dados.taxa === "0,00" ? " Sem taxa." : ` Taxa: R$ ${dados.taxa}.`;
   if (dados.aposCancelamento) {
-    return `O PIX agendado de R$ ${dados.valor} para ${dados.destino} foi enviado porque o envio já tinha começado. Não haverá próximo envio.${comprovante}${taxa} Saldo: R$ ${dados.saldo}.`;
+    return `O PIX agendado de R$ ${dados.valor} para ${dados.destino} foi enviado porque o envio já tinha começado. Não haverá próximo envio.${comprovante}${taxa} Saldo agora: R$ ${dados.saldo}.`;
   }
   const proximo = dados.proximo === undefined ? "" : ` O próximo envio está marcado para ${dados.proximo}.`;
-  return `PIX agendado de R$ ${dados.valor} enviado para ${dados.destino}.${comprovante}${taxa} Saldo: R$ ${dados.saldo}.${proximo}`;
+  return `PIX agendado de R$ ${dados.valor} enviado para ${dados.destino}.${comprovante}${taxa} Saldo agora: R$ ${dados.saldo}.${proximo}`;
 }
 
 export function respostaPixAgendadoNaoEnviado(dados: {
