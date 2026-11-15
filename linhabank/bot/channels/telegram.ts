@@ -7,6 +7,7 @@ import { comandoAgendamentos, listarAgendamentos, processarAgendamentos } from "
 import { tratarCallbackAdmin, tratarMidiaAdmin, tratarSemTextoAdmin, tratarTextoAdmin } from "../lib/admin/telegram.js";
 import { aceitarTermos, decidirTermos, lerConta, operarConta, TEXTO_RECUSA } from "../lib/banco.js";
 import { abrirClube, comandoClube, tratarCallbackClube } from "../lib/clube/telegram.js";
+import { abrirCofrinho, comandoCofrinho, tratarCallbackCofrinho, tratarTextoCofrinho } from "../lib/cofrinho/telegram.js";
 import { aoAbrirContaFidelidade, capturarStartIndicacao, payloadStart } from "../lib/fidelidade/index.js";
 import { garantirConfig } from "../lib/config.js";
 import { responderManutencao } from "../lib/manutencao.js";
@@ -171,6 +172,10 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
       await tratarCallbackClube(deps.kv, atualizacao);
       return;
     }
+    if (atualizacao.decisao === "cofrinho") {
+      await tratarCallbackCofrinho(deps.kv, atualizacao);
+      return;
+    }
     await responderCallback(atualizacao.callbackId);
     if (atualizacao.decisao === "ignorar") return;
     if (atualizacao.decisao === "recuso") {
@@ -203,6 +208,21 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
   const existente = await lerConta(deps.kv, atualizacao.chatId);
   if (comandoClube(atualizacao.texto)) {
     await abrirClube(deps.kv, atualizacao.chatId, atualizacao.mensagemId);
+    return;
+  }
+  if (comandoCofrinho(atualizacao.texto)) {
+    await abrirCofrinho(deps.kv, atualizacao.chatId, atualizacao.mensagemId);
+    return;
+  }
+  if (
+    await tratarTextoCofrinho(
+      deps.kv,
+      atualizacao.chatId,
+      atualizacao.texto,
+      atualizacao.mensagemId,
+      `cof:${atualizacao.updateId}`,
+    )
+  ) {
     return;
   }
   if (comandoAgendamentos(atualizacao.texto)) {

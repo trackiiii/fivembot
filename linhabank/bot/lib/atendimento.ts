@@ -87,7 +87,7 @@ export type Atualizacao =
       updateId: number;
       callbackId: string;
       dados: string;
-      decisao: "concordo" | "recuso" | "admin" | "clube" | "ignorar";
+      decisao: "concordo" | "recuso" | "admin" | "clube" | "cofrinho" | "ignorar";
     };
 
 export type TecladoInline = { text: string; callback_data: string }[][];
@@ -240,7 +240,9 @@ export function interpretarAtualizacao(corpo: unknown): Atualizacao {
             ? "admin"
             : data.startsWith("c:")
               ? "clube"
-              : "ignorar";
+              : data.startsWith("k:")
+                ? "cofrinho"
+                : "ignorar";
     return {
       tipo: "callback",
       chatId: String(chat.id),
@@ -621,6 +623,7 @@ const COMANDOS_CLIENTE = [
   { command: "extrato", description: "Ver o histórico da conta" },
   { command: "depositar", description: "Gerar QR Code para depósito PIX" },
   { command: "club", description: "Abrir o LINHABANK CLUB" },
+  { command: "cofrinho", description: "Guardar e resgatar no cofrinho" },
 ];
 
 export async function configurarPerfil(): Promise<boolean> {
@@ -632,7 +635,7 @@ export async function configurarPerfil(): Promise<boolean> {
   });
   await chamarTelegram("setMyDescription", {
     description:
-      "A Thialinha cuida da sua conta no LinhaBank neste chat: saldo, PIX, agendamento e o Club. O app abre no botão LinhaBank ao lado da mensagem.",
+      "A Thialinha cuida da sua conta no LinhaBank neste chat: saldo, PIX, cofrinho, agendamento e o Club. O app abre no botão LinhaBank ao lado da mensagem.",
   });
   await chamarTelegram("setMyCommands", { commands: comandos });
   await configurarMenuApp();

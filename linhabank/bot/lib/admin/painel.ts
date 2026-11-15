@@ -34,6 +34,8 @@ import {
   telaConfirmarAnuncio,
 } from "./anuncio.js";
 import { blocoFichaClube, telaClube, telaMovimentoClube } from "./clube.js";
+import { listarCofrinhos } from "../cofrinho/store.js";
+import { totalGuardadoConta, totalGuardadoGeral } from "../cofrinho/servico.js";
 import {
   ajustarLbcoinsAdmin,
   ajustarXpAdmin,
@@ -62,7 +64,8 @@ export type AbaAdmin =
   | "anuncio"
   | "anunciook"
   | "clube"
-  | "clubemov";
+  | "clubemov"
+  | "cofrinhos";
 export type CampoPendente =
   | "nomeExibido"
   | "chaveRecebimento"
@@ -198,6 +201,8 @@ const ROTULO_MOVIMENTO: Record<string, string> = {
   transferencia_recebida: "Transferência recebida",
   taxa: "Tarifa",
   estorno: "Estorno",
+  cofrinho_guardar: "Cofrinho guardado",
+  cofrinho_resgatar: "Cofrinho resgatado",
 };
 
 export function lerComandoAdmin(texto: string): { token?: string } | undefined {
@@ -278,12 +283,13 @@ export async function montarTela(kv: HostKvApi, chatId: string): Promise<TelaAdm
     if (conta === undefined) return { texto: "Conta não localizada.", teclado: voltar("a:c", "Voltar às contas") };
     return telaMovimentoClube(kv, conta.chatId, `${conta.numero}  ${conta.nome}`, voltar(`a:d:${ui.indice ?? 0}`, "Voltar à ficha"));
   }
+  if (ui.aba === "cofrinhos") return telaCofrinhos(kv, painel, ui.indice ?? 0);
   if (ui.aba === "anuncio") return telaAnuncio(kv, chatId, voltar("a:v"));
   if (ui.aba === "anunciook") {
     const rascunho = await lerRascunho(kv, chatId);
     return telaConfirmarAnuncio(rascunho, (await listarChatIdsClientes(kv, true)).length, voltar("a:n", "Voltar ao anúncio"));
   }
-  return telaResumo(painel, config, await contarAgendamentosAtivos(kv));
+  return telaResumo(painel, config, await contarAgendamentosAtivos(kv), await totalGuardadoGeral(kv));
 }
 
 export async function aplicarAcao(kv: HostKvApi, chatId: string, dados: string): Promise<ResultadoAdmin> {
@@ -734,6 +740,12 @@ export function parseAcao(dados: string):
   if (dados === "a:t:b") return { tipo: "toggle", campo: "botaoMiniApp" };
   if (dados === "a:t:m") return { tipo: "toggle", campo: "manutencao" };
   if (dados === "a:q") return { tipo: "pedir", campo: "busca" };
+  const cofre = dados.match(/^a:cf:(\d+)$/);
+  if (cofre !== null) {
+    const indice = Number(cofre[1]);
+    if (!Number.isSafeInteger(indice) || indice < 0 || indice > 10_000) return undefined;
+    return { tipo: "aba", aba: "cofrinhos", indice, pagina: 0 };
+  }
   const aba = dados.match(/^a:([cpl]):(\d+)$/) ?? dados.match(/^a:([cpl])$/);
   if (aba !== null) {
     const letra = aba[1];
@@ -801,7 +813,8 @@ function abaValida(valor: unknown): valor is AbaAdmin {
     valor === "anuncio" ||
     valor === "anunciook" ||
     valor === "clube" ||
-    valor === "clubemov"
+    valor === "clubemov" ||
+    valor === "cofrinhos"
   );
 }
 
@@ -882,6 +895,7 @@ function telaResumo(
   painel: Awaited<ReturnType<typeof painelCarteira>>,
   config: ReturnType<typeof configAtual>,
   agendados: number,
+  guardadoCentavos: number,
 ): TelaAdmin {
   const ativas = painel.contas.filter((item) => !contaInativa(item.status)).length;
   const desativadas = painel.contas.length - ativas;
@@ -893,6 +907,7 @@ function telaResumo(
     "Gerência",
     "",
     `Saldo das contas: R$ ${reaisDe(painel.totalCentavos)}`,
+    `Cofrinhos: R$ ${reaisDe(guardadoCentavos)}`,
     `Contas: ${ativas} ativa(s) · ${desativadas} desativada(s)`,
     `PIX esperando pagamento: ${abertas.length} · R$ ${reaisDe(somaAbertas(painel))}`,
     `Hoje: + R$ ${reaisDe(volume.credito)}  − R$ ${reaisDe(volume.debito)}`,
@@ -998,6 +1013,8 @@ async function telaFicha(
     return { texto: "Conta não localizada.", teclado: voltar("a:c", "Voltar às contas") };
   }
   const clube = await blocoFichaClube(kv, conta.chatId);
+  const guardado = await totalGuardadoConta(kv, conta.chatId);
+  const qtdCofrinhos = (await listarCofrinhos(kv, conta.chatId)).length;
   const texto = [
     "Ficha cadastral",
     "",
@@ -1006,6 +1023,7 @@ async function telaFicha(
     `Telegram: ${conta.chatId}`,
     `Situação: ${rotuloStatus(conta.status)}`,
     `Saldo: R$ ${conta.saldo}`,
+    `Cofrinhos: ${qtdCofrinhos} · R$ ${reaisDe(guardado)}`,
     `Chave interna: ${conta.chaveInterna}`,
     `Cartão virtual: **** ${conta.cartaoFinal}  ·  ${conta.cartaoBloqueado ? "bloqueado" : "liberado"}`,
     `Abertura: ${quando(conta.aceitouEm)}`,
@@ -1030,6 +1048,7 @@ async function telaFicha(
           callback_data: `a:j:${indice}`,
         },
         { text: "Extrato", callback_data: `a:e:${indice}` },
+        { text: "Cofrinhos", callback_data: `a:cf:${indice}` },
         { text: "LBcoins ±", callback_data: `a:lb:${indice}` },
         { text: "XP ±", callback_data: `a:xp:${indice}` },
         { text: "Movimento Club", callback_data: `a:lm:${indice}` },
@@ -1040,6 +1059,34 @@ async function telaFicha(
       ),
       ...voltar("a:c", "Voltar às contas"),
     ],
+  };
+}
+
+async function telaCofrinhos(
+  kv: HostKvApi,
+  painel: Awaited<ReturnType<typeof painelCarteira>>,
+  indice: number,
+): Promise<TelaAdmin> {
+  const conta = painel.contas[indice];
+  if (conta === undefined) return { texto: "Conta não localizada.", teclado: voltar("a:c", "Voltar às contas") };
+  const itens = await listarCofrinhos(kv, conta.chatId, true);
+  const guardado = itens.filter((item) => item.status === "ativo").reduce((soma, item) => soma + item.saldoCentavos, 0);
+  const linhas =
+    itens.length === 0
+      ? ["Nenhum cofrinho."]
+      : itens.map((item) => {
+          const meta = item.metaCentavos > 0 ? ` · meta R$ ${reaisDe(item.metaCentavos)}` : "";
+          return `${item.nome} · ${item.status} · R$ ${reaisDe(item.saldoCentavos)}${meta}`;
+        });
+  return {
+    texto: [
+      `Cofrinhos · ${conta.numero}  ${conta.nome}`,
+      `Disponível R$ ${conta.saldo}`,
+      `Guardado R$ ${reaisDe(guardado)}`,
+      "",
+      ...linhas,
+    ].join("\n"),
+    teclado: voltar(`a:d:${indice}`, "Voltar à ficha"),
   };
 }
 
@@ -1261,7 +1308,7 @@ function filtrarContas(contas: ContaPainel[], termo: string): ContaPainel[] {
   );
 }
 
-function volumeDoDia(ledger: { em: string; valorCentavos: number }[], agora = new Date()): { credito: number; debito: number } {
+function volumeDoDia(ledger: { em: string; tipo?: string; valorCentavos: number }[], agora = new Date()): { credito: number; debito: number } {
   const hoje = dataHoraBrasil(agora).data;
   let credito = 0;
   let debito = 0;
@@ -1269,6 +1316,7 @@ function volumeDoDia(ledger: { em: string; valorCentavos: number }[], agora = ne
     const instante = Date.parse(item.em);
     if (!Number.isFinite(instante)) continue;
     if (dataHoraBrasil(new Date(instante)).data !== hoje) continue;
+    if (item.tipo === "cofrinho_guardar" || item.tipo === "cofrinho_resgatar") continue;
     if (item.valorCentavos >= 0) credito += item.valorCentavos;
     else debito += Math.abs(item.valorCentavos);
   }
@@ -1433,5 +1481,5 @@ function avisoTaxasGateway(taxas: TaxasPsp): string {
 }
 
 function tipoCredito(tipo: string): boolean {
-  return tipo === "pix_recebido" || tipo === "deposito" || tipo === "transferencia_recebida" || tipo === "estorno";
+  return tipo === "pix_recebido" || tipo === "deposito" || tipo === "transferencia_recebida" || tipo === "estorno" || tipo === "cofrinho_resgatar";
 }

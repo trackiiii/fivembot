@@ -77,7 +77,7 @@ Grave os valores em `.env.local` (o arquivo não entra no git):
 | `LINHABANK_BENEFICIO_OURO` | Texto extra de benefício do Ouro. Vazio = só o que já existe |
 | `LINHABANK_VOZ` | `0` desliga a nota de voz da Thialinha. Padrão: ligada. A voz humana é a neural pt-BR Francisca: `python3 -m pip install edge-tts` e `ffmpeg`. A frase falada segue para `speech.platform.bing.com`. Sem isso, cai no Mbrola/`espeak-ng` |
 
-Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia; com código: registra indicação), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`, `/club`. As falas da Thialinha no chat começam com o nome em negrito. O admin abre `/admin` no mesmo chat, com botões. No Clube, a gerência aprova indicações, ajusta LBcoins/XP com justificativa e configura recompensa e faixas de XP.
+Comandos úteis no Telegram: `/start` (com conta: saldo e movimentação do dia; com código: registra indicação), `/ajuda`, `/saldo`, `/extrato`, `/depositar 50,00`, `/agendamentos`, `/cofrinho`, `/club`. As falas da Thialinha no chat começam com o nome em negrito. O admin abre `/admin` no mesmo chat, com botões. No Clube, a gerência aprova indicações, ajusta LBcoins/XP com justificativa e configura recompensa e faixas de XP.
 
 ## Webhooks
 
@@ -94,7 +94,7 @@ O corpo do PIX recebido leva `id` (idempotente), `valorCentavos` e um destes: `t
 
 Os lançamentos são imutáveis. Estorno de PIX recusado pela gateway vira um crédito novo, não uma exclusão. Transferência entre contas trava as duas contas, debita e credita na mesma transação.
 
-Com `DATABASE_URL`, rode `npm run migrate` e o schema em `migrations/` (`001_wallet.sql`, `002_cobranca_taxa.sql`, `003_fidelidade.sql`). Sem Postgres, o mesmo modelo (carteira BRL e LBcoins) roda no KV, com trava por conta.
+Com `DATABASE_URL`, rode `npm run migrate` e o schema em `migrations/` (`001_wallet.sql`, `002_cobranca_taxa.sql`, `003_fidelidade.sql`, `004_cofrinho.sql`). Sem Postgres, o mesmo modelo (carteira BRL, cofrinho e LBcoins) roda no KV, com trava por conta. O cofrinho é saldo real separado do disponível, sem taxa e sem rendimento.
 
 ## Publicação
 

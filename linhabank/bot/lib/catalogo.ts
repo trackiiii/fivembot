@@ -1,4 +1,4 @@
-export const TEMAS = ["conta", "pix", "cartao", "atendimento", "seguranca", "clube"] as const;
+export const TEMAS = ["conta", "pix", "cartao", "atendimento", "seguranca", "clube", "cofrinho"] as const;
 
 export type Tema = (typeof TEMAS)[number];
 
@@ -66,6 +66,18 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
       "O programa LINHABANK INDIQUE E GANHE dá um código e um link de convite. Abrir o bot pelo link não credita LBcoins. A recompensa só cai quando a indicação é aprovada.",
       "Uma pessoa não indica a si mesma. Cada conta só pode ser indicada uma vez. A gerência configura o valor e o critério de aprovação.",
       "O cliente consulta o Club neste chat com /club. A Thialinha só informa números que a ferramenta devolver.",
+    ],
+  },
+  cofrinho: {
+    titulo: "Cofrinho",
+    fatos: [
+      "O cofrinho separa dinheiro da própria conta. Não é LBcoins e não é outra conta.",
+      "Guardar tira do saldo disponível. Resgatar devolve para a conta. Não tem taxa.",
+      "O cofrinho não tem rendimento. O valor não cresce sozinho.",
+      "PIX, transferência e boleto usam só o saldo disponível. O que está no cofrinho fica parado até o resgate.",
+      "Dá para ter até 8 cofrinhos, cada um com nome e meta opcional. A meta não move dinheiro.",
+      "Encerrar só é possível com o cofrinho zerado.",
+      "O cliente abre com /cofrinho. A Thialinha só informa valores que a conta devolver.",
     ],
   },
 };

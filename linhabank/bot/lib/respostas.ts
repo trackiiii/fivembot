@@ -1,7 +1,7 @@
 import { dataHoraBrasil } from "./horario.js";
 
 export const RESPOSTA_AJUDA =
-  "Tô aqui. Posso ver o saldo, gerar um PIX pra receber, mandar um, agendar um envio ou abrir o Club. Me fala o que você precisa.";
+  "Tô aqui. Posso ver o saldo, gerar um PIX pra receber, mandar um, guardar no cofrinho, agendar um envio ou abrir o Club. Me fala o que você precisa.";
 
 export type ItemExtrato = {
   em: string;
@@ -20,6 +20,8 @@ const ROTULO_TIPO: Record<string, string> = {
   transferencia_recebida: "transferência recebida",
   taxa: "taxa",
   estorno: "estorno",
+  cofrinho_guardar: "guardado no cofrinho",
+  cofrinho_resgatar: "resgate do cofrinho",
 };
 
 export function movimentosDoDia(itens: ItemExtrato[], agora = new Date()): ItemExtrato[] {

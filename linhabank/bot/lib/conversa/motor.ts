@@ -4,6 +4,7 @@ import { listarCobrancas } from "../store-kv.js";
 import { sqlDisponivel } from "../db.js";
 import { listarCobrancasSql } from "../store-sql.js";
 import { operarConta, reaisDe } from "../banco.js";
+import { executarTexto, seguirPendente } from "../cofrinho/servico.js";
 import { consultarClube, rotuloCategoria } from "../fidelidade/index.js";
 import { configAtual } from "../config.js";
 import { RESPOSTA_CONTA_DESATIVADA } from "../respostas.js";
@@ -14,7 +15,7 @@ import { gravarEstadoFala, lerEstadoFala } from "./estado.js";
 import type { Categoria, ResultadoLocal, Slots } from "./tipos.js";
 
 const LEITURA: Categoria[] = ["saldo", "extratos", "pendentes", "confirmados"];
-const PRECISA_CONTA: Categoria[] = [...LEITURA, "depositos", "transferencias", "clube"];
+const PRECISA_CONTA: Categoria[] = [...LEITURA, "depositos", "transferencias", "clube", "cofrinho"];
 
 export async function responderLocal(
   kv: HostKvApi,
@@ -25,6 +26,11 @@ export async function responderLocal(
   historicoVazio: boolean,
   idOperacao: string,
 ): Promise<ResultadoLocal> {
+  const seguido = await seguirPendente(kv, chatId, texto, idOperacao);
+  if (seguido.tratado) {
+    return { tipo: "texto", texto: seguido.texto, categoria: "cofrinho", falaId: "cofrinho-acao" };
+  }
+
   const estado = await lerEstadoFala(kv, chatId);
   const intencao = classificarTexto(texto, estado.pendente);
   if (intencao.categoria === "modelo") return { tipo: "modelo" };
@@ -37,6 +43,13 @@ export async function responderLocal(
   const slots: Slots = { nome: primeiroNome(nome) ?? nome };
   let proximo = estado.pendente;
   let valorDeposito: string | undefined;
+
+  if (categoria === "cofrinho" && temConta) {
+    const textoFinal = await executarTexto(kv, chatId, texto, idOperacao);
+    const novo = registrarUso({ ...estado, pendente: undefined }, "cofrinho", "cofrinho-acao");
+    await gravarEstadoFala(kv, chatId, novo);
+    return { tipo: "texto", texto: textoFinal, categoria: "cofrinho", falaId: "cofrinho-acao" };
+  }
 
   if (categoria === "depositos") {
     valorDeposito = extrairValorDeposito(texto);
@@ -201,5 +214,7 @@ function rotuloTipo(tipo: string): string {
   if (tipo === "transferencia_recebida") return "transferência recebida";
   if (tipo === "taxa") return "taxa";
   if (tipo === "estorno") return "estorno";
+  if (tipo === "cofrinho_guardar") return "guardado no cofrinho";
+  if (tipo === "cofrinho_resgatar") return "resgate do cofrinho";
   return tipo;
 }

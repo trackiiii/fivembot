@@ -120,7 +120,15 @@ export async function aplicarSql(pedido: {
   idempotencyKey: string;
   chatIds: string[];
   movimentos: PedidoMovimento[];
-}): Promise<{ ok: true; comprovante: string } | { ok: false; motivo: "saldo_insuficiente" | "conta_bloqueada" | "repetido" | "sem_conta"; comprovante?: string }> {
+  pote?: { id: string; chatId: string; deltaCentavos: number };
+}): Promise<
+  | { ok: true; comprovante: string }
+  | {
+      ok: false;
+      motivo: "saldo_insuficiente" | "conta_bloqueada" | "repetido" | "sem_conta" | "cofrinho_insuficiente" | "cofrinho_indisponivel";
+      comprovante?: string;
+    }
+> {
   return comSql(async (query) => {
     const previa = await query<{ comprovante: string }>(
       "select comprovante from ledger where idempotency_key = $1 limit 1",
@@ -152,6 +160,19 @@ export async function aplicarSql(pedido: {
       }
       saldos.set(movimento.chatId, saldo + movimento.valorCentavos);
     }
+    let poteNovo: number | undefined;
+    if (pedido.pote !== undefined) {
+      const potes = await query<{ chat_id: string; saldo_centavos: string | number; status: string }>(
+        "select chat_id, saldo_centavos, status from cofrinhos where id = $1 for update",
+        [pedido.pote.id],
+      );
+      const pote = potes[0];
+      if (pote === undefined || pote.chat_id !== pedido.pote.chatId || pote.status !== "ativo") {
+        return { ok: false as const, motivo: "cofrinho_indisponivel" as const };
+      }
+      poteNovo = inteiro(pote.saldo_centavos) + pedido.pote.deltaCentavos;
+      if (poteNovo < 0) return { ok: false as const, motivo: "cofrinho_insuficiente" as const };
+    }
     const comprovante = novoComprovante();
     for (const movimento of pedido.movimentos) {
       const conta = contas.get(movimento.chatId);
@@ -177,6 +198,9 @@ export async function aplicarSql(pedido: {
         novoSaldo,
       ]);
       conta.saldo_centavos = novoSaldo;
+    }
+    if (pedido.pote !== undefined && poteNovo !== undefined) {
+      await query("update cofrinhos set saldo_centavos = $2 where id = $1", [pedido.pote.id, poteNovo]);
     }
     return { ok: true as const, comprovante };
   });

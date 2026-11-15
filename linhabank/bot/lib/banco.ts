@@ -57,7 +57,9 @@ export type TipoMovimento =
   | "transferencia_recebida"
   | "taxa"
   | "deposito"
-  | "estorno";
+  | "estorno"
+  | "cofrinho_guardar"
+  | "cofrinho_resgatar";
 
 export type Movimento = {
   id: string;
@@ -177,12 +179,13 @@ export const TEXTO_TERMOS = [
   "",
   "1. A conta é individual e de sua titularidade.",
   "2. Agência, número da conta e chave de transferência identificam a sua conta nas movimentações entre clientes LinhaBank.",
-  "3. Saldo, extrato, PIX, PIX agendado, transferência, pagamento de boleto e cartão virtual são serviços desta conta.",
+  "3. Saldo, extrato, PIX, PIX agendado, transferência, pagamento de boleto, cartão virtual e cofrinho são serviços desta conta.",
   "4. Neste atendimento não são solicitados senha, código de verificação, CVV nem o número completo do cartão.",
   "5. O uso da conta observa a legislação aplicável. O LinhaBank pode recusar uma operação ou encerrar a conta em caso de uso irregular.",
   "6. O PIX agendado, depois de confirmado neste atendimento, é enviado automaticamente no horário definido, até que seja cancelado.",
   "7. PIX entre contas LinhaBank, identificado pela chave da conta, não tem taxa. PIX para outras instituições pode ter taxa, informada antes da confirmação.",
   "8. Depósito via PIX só entra no saldo depois da confirmação do pagamento. Foto ou texto de comprovante enviado neste chat não credita valor.",
+  "9. O cofrinho separa um valor do saldo disponível. Não tem taxa nem rendimento. O PIX usa só o que ficou disponível. Resgatar devolve o valor para a conta.",
   "",
   "Para abrir a conta, toque em Concordo ou responda CONCORDO.",
 ].join("\n");
@@ -451,9 +454,21 @@ async function aplicar(
   chatIds: string[],
   idempotencyKey: string,
   movimentos: { chatId: string; tipo: TipoMovimento; valorCentavos: number; descricao: string; contraChatId?: string }[],
+  pote?: {
+    id: string;
+    chatId: string;
+    deltaCentavos: number;
+    carregar: (id: string) => Promise<{ chatId: string; saldoCentavos: number; status: "ativo" | "encerrado" } | undefined>;
+    gravarSaldo: (id: string, saldoCentavos: number) => Promise<void>;
+  },
 ): Promise<{ ok: true; contas: Conta[]; comprovante: string } | { ok: false; motivo: string; contas: Conta[] }> {
   if (sqlDisponivel()) {
-    const sqlResultado = await aplicarSql({ idempotencyKey, chatIds, movimentos });
+    const sqlResultado = await aplicarSql({
+      idempotencyKey,
+      chatIds,
+      movimentos,
+      pote: pote === undefined ? undefined : { id: pote.id, chatId: pote.chatId, deltaCentavos: pote.deltaCentavos },
+    });
     const contas: Conta[] = [];
     for (const id of chatIds) {
       const conta = await lerConta(kv, id);
@@ -471,7 +486,60 @@ async function aplicar(
     movimentos,
     carregar: (chatId) => lerConta(kv, chatId),
     gravarConta: (conta) => gravarConta(kv, conta),
+    potes:
+      pote === undefined
+        ? undefined
+        : {
+            ajustes: [{ id: pote.id, chatId: pote.chatId, deltaCentavos: pote.deltaCentavos }],
+            carregar: pote.carregar,
+            gravarSaldo: pote.gravarSaldo,
+          },
   });
+}
+
+export async function reservarEntreContaEPote(
+  kv: HostKvApi,
+  pedido: {
+    idempotencyKey: string;
+    chatId: string;
+    centavos: number;
+    direcao: "guardar" | "resgatar";
+    descricao: string;
+    poteId: string;
+    carregarPote: (id: string) => Promise<{ chatId: string; saldoCentavos: number; status: "ativo" | "encerrado" } | undefined>;
+    gravarSaldoPote: (id: string, saldoCentavos: number) => Promise<void>;
+  },
+): Promise<{ ok: true; saldoCentavos: number; comprovante: string } | { ok: false; motivo: string }> {
+  if (!Number.isSafeInteger(pedido.centavos) || pedido.centavos < 1 || pedido.centavos > 100_000_000) {
+    return { ok: false, motivo: "valor_invalido" };
+  }
+  const conta = await lerConta(kv, pedido.chatId);
+  if (conta === undefined) return { ok: false, motivo: "sem_conta" };
+  if (pedido.direcao === "guardar" && contaInativa(conta.status)) return { ok: false, motivo: "conta_bloqueada" };
+  const delta = pedido.direcao === "guardar" ? pedido.centavos : -pedido.centavos;
+  const resultado = await aplicar(
+    kv,
+    [pedido.chatId],
+    pedido.idempotencyKey,
+    [
+      {
+        chatId: pedido.chatId,
+        tipo: pedido.direcao === "guardar" ? "cofrinho_guardar" : "cofrinho_resgatar",
+        valorCentavos: -delta,
+        descricao: pedido.descricao,
+      },
+    ],
+    {
+      id: pedido.poteId,
+      chatId: pedido.chatId,
+      deltaCentavos: delta,
+      carregar: pedido.carregarPote,
+      gravarSaldo: pedido.gravarSaldoPote,
+    },
+  );
+  if (!resultado.ok) return { ok: false, motivo: resultado.motivo };
+  const atual = resultado.contas.find((item) => item.chatId === pedido.chatId);
+  return { ok: true, saldoCentavos: atual?.saldoCentavos ?? 0, comprovante: resultado.comprovante };
 }
 
 async function contaPorChat(kv: HostKvApi, chave: string): Promise<Conta | undefined> {

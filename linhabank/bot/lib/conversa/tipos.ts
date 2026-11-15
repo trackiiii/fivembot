@@ -20,6 +20,7 @@ export const CATEGORIAS = [
   "despedidas",
   "incompreensao",
   "clube",
+  "cofrinho",
 ] as const;
 
 export type Categoria = (typeof CATEGORIAS)[number];

@@ -134,8 +134,21 @@ export async function aplicarAtomico(
     movimentos: PedidoMovimento[];
     carregar: (chatId: string) => Promise<Conta | undefined>;
     gravarConta: (conta: Conta) => Promise<void>;
+    potes?: {
+      ajustes: { id: string; chatId: string; deltaCentavos: number }[];
+      carregar: (id: string) => Promise<{ chatId: string; saldoCentavos: number; status: "ativo" | "encerrado" } | undefined>;
+      gravarSaldo: (id: string, saldoCentavos: number) => Promise<void>;
+    };
   },
-): Promise<{ ok: true; contas: Conta[]; comprovante: string } | { ok: false; motivo: "saldo_insuficiente" | "conta_bloqueada" | "sem_conta"; contas: Conta[]; comprovante?: string }> {
+): Promise<
+  | { ok: true; contas: Conta[]; comprovante: string }
+  | {
+      ok: false;
+      motivo: "saldo_insuficiente" | "conta_bloqueada" | "sem_conta" | "cofrinho_insuficiente" | "cofrinho_indisponivel";
+      contas: Conta[];
+      comprovante?: string;
+    }
+> {
   const ids = [...new Set(pedido.chatIds)];
   return comTravas(kv, ids, async () => {
     const previa = comoObjeto(await kv.get(chaveIdem(pedido.idempotencyKey)));
@@ -166,6 +179,18 @@ export async function aplicarAtomico(
         return { ok: false as const, motivo: "saldo_insuficiente" as const, contas: [...mapa.values()] };
       }
       saldos.set(movimento.chatId, saldo + movimento.valorCentavos);
+    }
+    const potesNovos = new Map<string, number>();
+    if (pedido.potes !== undefined) {
+      for (const ajuste of pedido.potes.ajustes) {
+        const pote = await pedido.potes.carregar(ajuste.id);
+        if (pote === undefined || pote.chatId !== ajuste.chatId || pote.status !== "ativo") {
+          return { ok: false as const, motivo: "cofrinho_indisponivel" as const, contas: [...mapa.values()] };
+        }
+        const novo = pote.saldoCentavos + ajuste.deltaCentavos;
+        if (novo < 0) return { ok: false as const, motivo: "cofrinho_insuficiente" as const, contas: [...mapa.values()] };
+        potesNovos.set(ajuste.id, novo);
+      }
     }
     const comprovante = novoComprovante();
     const agora = new Date().toISOString();
@@ -200,6 +225,9 @@ export async function aplicarAtomico(
     }
     await gravarLancamentos(kv, lancamentos);
     for (const conta of mapa.values()) await pedido.gravarConta(conta);
+    if (pedido.potes !== undefined) {
+      for (const [id, saldo] of potesNovos) await pedido.potes.gravarSaldo(id, saldo);
+    }
     await kv.put(chaveIdem(pedido.idempotencyKey), { ok: true, comprovante });
     return { ok: true as const, contas: [...mapa.values()], comprovante };
   });

@@ -1,6 +1,7 @@
 import type { HostKvApi } from "@grok/agent-sdk";
 
-import { operarConta, type PedidoConta, type ResultadoOperacao } from "../banco.js";
+import { operarConta, reaisDe, type PedidoConta, type ResultadoOperacao } from "../banco.js";
+import { totalGuardadoConta } from "../cofrinho/servico.js";
 import { enviarTexto, registrarTroca } from "../atendimento.js";
 import { emManutencao, garantirConfig } from "../config.js";
 import { RESPOSTA_MANUTENCAO } from "../respostas.js";
@@ -25,6 +26,7 @@ export type RespostaApp = {
   modo: string;
   nome?: string;
   saldo?: string;
+  guardado?: string;
   conta?: ResultadoOperacao["conta"];
   extrato?: ResultadoOperacao["extrato"];
   valor?: string;
@@ -101,6 +103,7 @@ export async function executarApp(
     nome,
     motivo: resultado.motivo,
     saldo: resultado.saldo,
+    guardado: reaisDe(await totalGuardadoConta(kv, chatId)),
     conta: resultado.conta,
     extrato: resultado.extrato,
     valor: resultado.valor,

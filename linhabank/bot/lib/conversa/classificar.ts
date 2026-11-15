@@ -163,6 +163,10 @@ export function classificarTexto(textoBruto: string, pendente?: "valor_deposito"
     return { categoria: "clube", confianca: 0.93 };
   }
 
+  if (tem(texto, ["cofrinho", "porquinho", "caixinha"])) {
+    return { categoria: "cofrinho", confianca: 0.94 };
+  }
+
   if (tem(texto, ["saldo", "quanto tenho", "quanto tem na conta", "quanto tem na minha", "meu dinheiro"])) {
     return { categoria: "saldo", confianca: 0.92 };
   }

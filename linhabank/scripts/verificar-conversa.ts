@@ -48,6 +48,8 @@ assert(classificarTexto("tchau").categoria === "despedidas", "despedida falhou")
 assert(classificarTexto("manda 50 pro ana@email.com").categoria === "modelo", "envio complexo foi local");
 assert(classificarTexto("quero agendar um pix").categoria === "modelo", "agendar foi local");
 assert(classificarTexto("quantos lbcoins eu tenho?").categoria === "clube", "lbcoins não foi Club");
+assert(classificarTexto("quanto tenho no cofrinho").categoria === "cofrinho", "cofrinho virou saldo");
+assert(classificarTexto("criar cofrinho viagem").categoria === "cofrinho", "criar cofrinho não foi local");
 assert(classificarTexto("qual é minha categoria?").categoria === "clube", "categoria não foi Club");
 
 {

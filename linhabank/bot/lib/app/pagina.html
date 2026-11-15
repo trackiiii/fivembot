@@ -110,6 +110,7 @@
     <div class="card">
       <div class="meta">Saldo da conta</div>
       <div class="saldo" id="saldo">R$ —</div>
+      <div class="meta" id="cofrinho"></div>
       <div class="meta" id="dados-conta">Abrindo sua conta…</div>
     </div>
     <div class="grid">
@@ -234,6 +235,8 @@
         return;
       }
       document.getElementById("saldo").textContent = reais(dados.saldo);
+      const cofre = document.getElementById("cofrinho");
+      cofre.textContent = dados.guardado && dados.guardado !== "0,00" ? "No cofrinho: R$ " + dados.guardado + ". Esse valor não entra no PIX." : "";
       const c = dados.conta || {};
       document.getElementById("dados-conta").textContent =
         "Agência " + (c.agencia || "—") +
