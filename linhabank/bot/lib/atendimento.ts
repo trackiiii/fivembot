@@ -386,7 +386,7 @@ export async function configurarPerfil(): Promise<boolean> {
   });
   await chamarTelegram("setMyDescription", {
     description:
-      "A Thialinha cuida da sua conta no LinhaBank. O saldo fica aqui. A gateway só envia e recebe PIX.",
+      "A Thialinha cuida da sua conta no LinhaBank. Saldo, PIX, transferência e cartão virtual ficam neste chat.",
   });
   await chamarTelegram("setMyCommands", { commands: comandos });
   return true;

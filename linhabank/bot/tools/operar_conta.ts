@@ -15,7 +15,7 @@ const acoes = [
 
 export default defineTool({
   description:
-    "Opera a conta LinhaBank deste chat. Saldo e extrato são desta conta, no LinhaBank. Agência, número e chaveTransferencia servem só para transferência entre contas LinhaBank. enviar_pix manda para uma chave de fora e só sai pela gateway. Se o motivo for destino_interno, oriente a usar transferir. Se for gateway_pendente, o saldo não mudou.",
+    "Opera a conta LinhaBank deste chat. Saldo e extrato são desta conta. Agência, número e chaveTransferencia servem só para transferência entre contas LinhaBank. enviar_pix manda para uma chave de fora. Se o motivo for destino_interno, oriente a usar transferir. Se for gateway_pendente ou gateway_indisponivel, diga só que o PIX não saiu e que o saldo não mudou. Nunca fale ao cliente a palavra gateway, nem referência, webhook ou como a ligação interna funciona.",
   effect: ({ acao }) => (acao === "resumo" || acao === "extrato" ? "read" : "write"),
   inputSchema: z.object({
     acao: z.enum(acoes).describe("resumo, extrato, enviar_pix, transferir, pagar_boleto, bloquear_cartao ou desbloquear_cartao."),

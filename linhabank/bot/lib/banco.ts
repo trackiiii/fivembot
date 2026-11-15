@@ -70,7 +70,7 @@ export const TEXTO_TERMOS = [
   "",
   "1. A conta é sua. Agência, número e chave interna servem para transferência entre contas LinhaBank.",
   "2. O saldo e o extrato ficam no LinhaBank.",
-  "3. PIX para fora sai pela gateway, e PIX recebido entra por ela. Sem a gateway, o PIX não sai nem entra.",
+  "3. PIX para outros bancos sai da sua conta, e PIX recebido entra nela.",
   "4. Boleto e transferência entre contas LinhaBank movem o saldo daqui.",
   "5. Eu não peço senha, código, CVV nem o número completo do cartão.",
   "",

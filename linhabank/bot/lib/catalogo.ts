@@ -13,16 +13,16 @@ export const CATALOGO: Record<Tema, ItemCatalogo> = {
     fatos: [
       "Cada pessoa que aceita os termos abre a própria conta neste chat. O saldo e o extrato ficam no LinhaBank.",
       "Agência 0001, o número e a chave interna servem só para transferência entre contas LinhaBank.",
-      "A conta abre com saldo zero. O saldo sobe quando entra um PIX pela gateway.",
+      "A conta abre com saldo zero. O saldo sobe quando entra um PIX.",
     ],
   },
   pix: {
     titulo: "PIX LinhaBank",
     fatos: [
       "O PIX funciona 24 horas, inclusive de madrugada e no fim de semana.",
-      "Enviar e receber PIX passa pela gateway. O saldo debitado ou creditado é o do LinhaBank.",
+      "PIX enviado sai da conta LinhaBank. PIX recebido entra nessa conta.",
       "A chave interna, a agência e o número da conta não são chave PIX para outros bancos.",
-      "A Thialinha confirma o PIX enviado só com o endToEndId da gateway.",
+      "A Thialinha confirma o PIX enviado com o comprovante da operação.",
       "Cada envio neste chat vai até R$ 5.000,00.",
     ],
   },

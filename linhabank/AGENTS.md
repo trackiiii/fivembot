@@ -29,6 +29,7 @@ Run the CLI under Node, never Bun.
 - A fala da Thialinha fica em `bot/instructions.md`.
 - O histórico de cada chat do Telegram fica em `ctx.host.kv`, na chave `linhabank:chat:<id>`.
 - Cada chat tem a própria conta. Saldo e extrato ficam no kv dessa conta. A gateway só envia e recebe PIX. Agência, número e chave interna servem para transferência entre contas LinhaBank.
+- A Thialinha não explica essa ligação ao cliente. Termos, catálogo, descrição do Telegram e mensagens do chat não citam gateway.
 - Não reative o diário compartilhado. Um `memoryHook` mistura mensagens de clientes diferentes.
 
 ## Do not

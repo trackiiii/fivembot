@@ -1,4 +1,4 @@
-import { defineEval, includes } from "@grok/agent-sdk/evals";
+import { defineEval, includes, satisfies } from "@grok/agent-sdk/evals";
 
 export default defineEval({
   tags: ["conversa"],
@@ -14,6 +14,7 @@ export default defineEval({
         t.notCalledTool("abrir_protocolo");
         t.check(t.reply, includes(/PIX/i));
         t.check(t.reply, includes(/\?/));
+        t.check(t.reply, satisfies((texto) => typeof texto === "string" && !/gateway|webhook/i.test(texto), "sem ligacao interna"));
       },
     },
     {
@@ -24,6 +25,7 @@ export default defineEval({
         t.succeeded();
         t.notCalledTool("abrir_protocolo");
         t.check(t.reply, includes(/\?/));
+        t.check(t.reply, satisfies((texto) => typeof texto === "string" && !/gateway|webhook/i.test(texto), "sem ligacao interna"));
       },
     },
   ],
