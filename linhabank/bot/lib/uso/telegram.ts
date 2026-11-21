@@ -89,7 +89,7 @@ export async function tratarCallbackUso(kv: HostKvApi, atualizacao: Callback): P
     await aplicarModo(kv, atualizacao.chatId, "dialogo");
     await limparPendenteUso(kv, atualizacao.chatId);
     await responderCallback(atualizacao.callbackId);
-    await enviarMensagem(atualizacao.chatId, "Combinado. Pode escrever. Se quiser os botões de novo, manda /menu.", {
+    await enviarMensagem(atualizacao.chatId, "Atendimento com a Thialinha. Escreva o que precisa. Para voltar às operações, toque no botão.", {
       teclado: tecladoTrocarMenu(),
       editar: atualizacao.mensagemId,
     });
@@ -165,7 +165,7 @@ export async function tratarTextoUso(
     return "menu";
   }
   const home = await montarMenu(kv, chatId);
-  await enviarMensagem(chatId, home?.texto ?? "Toque no que você precisa.", {
+  await enviarMensagem(chatId, home?.texto ?? "LINHABANK\nConta indisponível.", {
     prefixo: false,
     teclado: home?.teclado,
     replyTo: mensagemId,

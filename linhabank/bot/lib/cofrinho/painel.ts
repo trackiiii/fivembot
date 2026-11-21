@@ -66,14 +66,15 @@ async function telaHome(kv: HostKvApi, chatId: string): Promise<TelaCofrinho> {
   const guardado = await totalGuardadoConta(kv, chatId);
   const linhas =
     itens.length === 0
-      ? ["Nenhum cofrinho ainda.", "O dinheiro guardado sai do disponível e volta quando você resgata. Sem taxa e sem rendimento."]
+      ? ["Nenhum cofrinho ainda.", "O valor guardado sai do disponível e volta no resgate. Sem tarifa e sem rendimento."]
       : itens.map((item) => linhaPote(item));
   return {
     texto: [
+      "LINHABANK",
       "Cofrinho",
       "",
-      `Disponível: R$ ${reaisDe(conta?.saldoCentavos ?? 0)}`,
-      `Guardado: R$ ${reaisDe(guardado)}`,
+      `Disponível na conta: R$ ${reaisDe(conta?.saldoCentavos ?? 0)}`,
+      `Total guardado: R$ ${reaisDe(guardado)}`,
       "",
       ...linhas,
     ].join("\n"),
@@ -91,20 +92,21 @@ async function telaPote(kv: HostKvApi, chatId: string, pote: Cofrinho): Promise<
     pote.metaCentavos > 0 ? `Meta: R$ ${reaisDe(pote.metaCentavos)} · ${progresso(pote)}%` : "Sem meta";
   return {
     texto: [
-      pote.nome,
+      "LINHABANK",
+      `Cofrinho · ${pote.nome}`,
       "",
       `Guardado: R$ ${reaisDe(pote.saldoCentavos)}`,
       meta,
       `Disponível na conta: R$ ${reaisDe(conta?.saldoCentavos ?? 0)}`,
       "",
-      "Guardar tira da conta. Resgatar devolve. Sem taxa e sem rendimento.",
+      "Guardar retira do disponível. Resgatar devolve. Sem tarifa e sem rendimento.",
     ].join("\n"),
     teclado: [
       [{ text: "Guardar", callback_data: `k:g:${pote.id}` }],
       [{ text: "Resgatar", callback_data: `k:r:${pote.id}` }],
-      [{ text: "Resgatar tudo", callback_data: `k:t:${pote.id}` }],
-      [{ text: "Meta", callback_data: `k:m:${pote.id}` }],
-      [{ text: "Nome", callback_data: `k:a:${pote.id}` }],
+      [{ text: "Resgatar integral", callback_data: `k:t:${pote.id}` }],
+      [{ text: "Definir meta", callback_data: `k:m:${pote.id}` }],
+      [{ text: "Alterar nome", callback_data: `k:a:${pote.id}` }],
       [{ text: "Encerrar", callback_data: `k:e:${pote.id}` }],
       [{ text: "Voltar", callback_data: "k:h" }],
     ],
@@ -116,7 +118,7 @@ function telaEncerrar(pote: Cofrinho): TelaCofrinho {
     return {
       texto: `${pote.nome} ainda tem R$ ${reaisDe(pote.saldoCentavos)}. Resgata antes de encerrar.`,
       teclado: [
-        [{ text: "Resgatar tudo", callback_data: `k:t:${pote.id}` }],
+        [{ text: "Resgatar integral", callback_data: `k:t:${pote.id}` }],
         [{ text: "Voltar", callback_data: `k:o:${pote.id}` }],
       ],
     };
@@ -124,7 +126,7 @@ function telaEncerrar(pote: Cofrinho): TelaCofrinho {
   return {
     texto: `Encerrar o cofrinho ${pote.nome}? Ele está zerado.`,
     teclado: [
-      [{ text: "Confirmar", callback_data: `k:y:${pote.id}` }],
+      [{ text: "Confirmar encerramento", callback_data: `k:y:${pote.id}` }],
       [{ text: "Voltar", callback_data: `k:o:${pote.id}` }],
     ],
   };

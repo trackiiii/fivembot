@@ -68,7 +68,7 @@ assert(tecladoTrocarMenu()[0]?.[0]?.callback_data === "u:m", "atalho para o menu
 
 {
   const escolha = telaEscolher();
-  assert(escolha.texto.includes("Como você prefere usar?"), "escolha sem pergunta");
+  assert(escolha.texto.includes("Como deseja operar a conta"), "escolha sem pergunta");
   assert(escolha.teclado.flat().some((item) => item.callback_data === "u:d"), "escolha sem Thialinha");
   assert(escolha.teclado.flat().some((item) => item.callback_data === "u:m"), "escolha sem menu");
   assert(opcoesIndividuais(escolha.teclado), "escolha com botões juntos");
@@ -105,8 +105,14 @@ assert(tecladoTrocarMenu()[0]?.[0]?.callback_data === "u:m", "atalho para o menu
   assert(home !== undefined, "home do menu vazia");
   if (home === undefined) throw new Error("home do menu vazia");
   assert(home.texto.includes("Disponível: R$ 100,00"), `home sem saldo: ${home.texto}`);
+  assert(home.texto.includes("Agência"), "home sem agência");
+  assert(home.texto.includes("Cofrinho:"), "home sem cofrinho");
   assert(!/Thialinha/i.test(home.texto), "menu com Thialinha");
-  assert(opcoesIndividuais(home.teclado), "menu com opções juntas");
+  assert(home.teclado[0]?.length === 2, "saldo e extrato não ficaram juntos");
+  assert(home.teclado.slice(1).every((linha) => linha.length === 1), "operações financeiras juntas");
+  const rotulos = home.teclado.flat().map((item) => item.text);
+  assert(rotulos.includes("Receber PIX") && rotulos.includes("Enviar PIX"), "home sem PIX");
+  assert(!rotulos.includes("Ajuda"), "ajuda no menu da conta");
   const dados = home.teclado.flat().map((item) => item.callback_data);
   assert(dados.includes("u:s") && dados.includes("u:p") && dados.includes("u:k") && dados.includes("u:b") && dados.includes("u:d"), "home incompleta");
   const saldo = await telaSaldo(kv, "11");
@@ -115,6 +121,7 @@ assert(tecladoTrocarMenu()[0]?.[0]?.callback_data === "u:m", "atalho para o menu
   assert(opcoesIndividuais(saldo.teclado), "saldo com botões juntos");
   const clube = await montarClube(kv, "11");
   assert(clube !== undefined && clube.teclado.flat().some((item) => item.callback_data === "u:m"), "Club no menu sem Voltar ao menu");
+  assert(clube !== undefined && clube.teclado.every((linha) => linha.length === 1), "Club home com opções juntas");
   await aplicarModo(kv, "11", "dialogo");
   assert((await lerModoUso(kv, "11")) === "dialogo", "dialogo não gravou");
   const clubeDialogo = await montarClube(kv, "11");

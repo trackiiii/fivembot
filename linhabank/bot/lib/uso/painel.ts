@@ -3,6 +3,7 @@ import type { HostKvApi } from "@grok/agent-sdk";
 import { cancelarAgendamento, listarAgendamentos } from "../agenda.js";
 import { lerConta, operarConta, reaisDe } from "../banco.js";
 import { totalGuardadoConta } from "../cofrinho/servico.js";
+import { formatarQuando } from "../horario.js";
 import { RESPOSTA_CONTA_DESATIVADA } from "../respostas.js";
 import { gravarModoUso, gravarPendenteUso, lerModoUso } from "./store.js";
 import type { BotaoUso, ModoUso, TelaUso } from "./tipos.js";
@@ -101,20 +102,24 @@ export function telaEscolher(): TelaUso {
   return {
     texto: [
       "LINHABANK",
+      "Canal de atendimento",
       "",
-      "Como você prefere usar?",
+      "Como deseja operar a conta neste chat?",
       "",
-      "Falar com a Thialinha — você escreve, ela responde.",
-      "Menu — você toca nos botões.",
+      "Menu de operações: saldo, PIX, cofrinho e Club por botões.",
+      "Atendimento Thialinha — você escreve, ela responde.",
       "",
-      "Dá para trocar depois em /menu ou /conversa.",
+      "A escolha pode ser alterada a qualquer momento.",
     ].join("\n"),
-    teclado: [[{ text: "Falar com a Thialinha", callback_data: "u:d" }], [{ text: "Usar o menu", callback_data: "u:m" }]],
+    teclado: [
+      [{ text: "Menu de operações", callback_data: "u:m" }],
+      [{ text: "Atendimento Thialinha", callback_data: "u:d" }],
+    ],
   };
 }
 
 export function tecladoTrocarMenu(): BotaoUso[][] {
-  return [[{ text: "Usar o menu", callback_data: "u:m" }]];
+  return [[{ text: "Menu de operações", callback_data: "u:m" }]];
 }
 
 export async function montarMenu(kv: HostKvApi, chatId: string): Promise<TelaUso | undefined> {
@@ -122,26 +127,29 @@ export async function montarMenu(kv: HostKvApi, chatId: string): Promise<TelaUso
   if (conta === undefined) return undefined;
   const resumo = await operarConta(kv, chatId, `uso:${chatId}:home`, { acao: "resumo" });
   const guardado = await totalGuardadoConta(kv, chatId);
-  const linhas = [
-    "LINHABANK",
-    "",
-    "Toque no que você precisa.",
-    "",
-    `Disponível: R$ ${resumo.saldo ?? reaisDe(conta.saldoCentavos)}`,
-  ];
-  if (guardado > 0) linhas.push(`No cofrinho: R$ ${reaisDe(guardado)}`);
+  const perfil = resumo.conta;
   return {
-    texto: linhas.join("\n"),
+    texto: [
+      "LINHABANK",
+      "Conta",
+      "",
+      `Agência ${perfil?.agencia ?? conta.agencia}  ·  Conta ${perfil?.numero ?? conta.numero}`,
+      `Chave ${perfil?.chaveTransferencia ?? conta.chaveInterna}`,
+      "",
+      `Disponível: R$ ${resumo.saldo ?? reaisDe(conta.saldoCentavos)}`,
+      `Cofrinho: R$ ${reaisDe(guardado)}`,
+    ].join("\n"),
     teclado: [
-      [{ text: "Saldo", callback_data: "u:s" }],
-      [{ text: "Extrato", callback_data: "u:x" }],
+      [
+        { text: "Saldo", callback_data: "u:s" },
+        { text: "Extrato", callback_data: "u:x" },
+      ],
       [{ text: "Receber PIX", callback_data: "u:r" }],
       [{ text: "Enviar PIX", callback_data: "u:p" }],
+      [{ text: "PIX agendados", callback_data: "u:a" }],
       [{ text: "Cofrinho", callback_data: "u:k" }],
-      [{ text: "Club", callback_data: "u:b" }],
-      [{ text: "Agendamentos", callback_data: "u:a" }],
-      [{ text: "Ajuda", callback_data: "u:h" }],
-      [{ text: "Falar com a Thialinha", callback_data: "u:d" }],
+      [{ text: "LINHABANK CLUB", callback_data: "u:b" }],
+      [{ text: "Atendimento Thialinha", callback_data: "u:d" }],
     ],
   };
 }
@@ -149,9 +157,24 @@ export async function montarMenu(kv: HostKvApi, chatId: string): Promise<TelaUso
 export async function telaSaldo(kv: HostKvApi, chatId: string): Promise<TelaUso> {
   const resumo = await operarConta(kv, chatId, `uso:${chatId}:saldo`, { acao: "resumo" });
   const guardado = await totalGuardadoConta(kv, chatId);
-  const linhas = ["Saldo", "", `Disponível: R$ ${resumo.saldo ?? "0,00"}`];
-  if (guardado > 0) linhas.push(`No cofrinho: R$ ${reaisDe(guardado)}`, "O PIX usa só o disponível.");
-  return { texto: linhas.join("\n"), teclado: voltar() };
+  const disponivel = resumo.saldo ?? "0,00";
+  return {
+    texto: [
+      "LINHABANK",
+      "Saldo da conta",
+      "",
+      `Disponível: R$ ${disponivel}`,
+      `Cofrinho: R$ ${reaisDe(guardado)}`,
+      "",
+      "PIX e boleto usam apenas o disponível.",
+    ].join("\n"),
+    teclado: [
+      [{ text: "Extrato", callback_data: "u:x" }],
+      [{ text: "Receber PIX", callback_data: "u:r" }],
+      [{ text: "Enviar PIX", callback_data: "u:p" }],
+      ...voltar(),
+    ],
+  };
 }
 
 export async function telaExtrato(kv: HostKvApi, chatId: string): Promise<TelaUso> {
@@ -159,29 +182,33 @@ export async function telaExtrato(kv: HostKvApi, chatId: string): Promise<TelaUs
   const itens = lista.extrato ?? [];
   const linhas =
     itens.length === 0
-      ? ["Ainda não há movimentação."]
+      ? ["Sem movimentação."]
       : itens.slice(0, 12).map((item) => {
           const tipo = ROTULO_TIPO[item.tipo] ?? item.tipo;
-          const extra = item.comprovante !== undefined && item.comprovante.length > 0 ? ` · ${item.comprovante}` : "";
-          return `${item.em}  ${tipo}  R$ ${item.valor}${extra}`;
+          const quando = Number.isFinite(Date.parse(item.em)) ? formatarQuando(item.em) : item.em;
+          const extra = item.comprovante !== undefined && item.comprovante.length > 0 ? `  ${item.comprovante}` : "";
+          return `${quando}  ${tipo}  R$ ${item.valor}${extra}`;
         });
   return {
-    texto: [`Extrato`, "", `Saldo: R$ ${lista.saldo ?? "0,00"}`, "", ...linhas].join("\n"),
+    texto: ["LINHABANK", "Extrato", "", `Disponível: R$ ${lista.saldo ?? "0,00"}`, "", ...linhas].join("\n"),
     teclado: voltar(),
   };
 }
 
 export function telaPedirValor(acao: "receber" | "enviar"): TelaUso {
   return {
-    texto: acao === "receber" ? "Qual valor receber? Manda em reais, tipo 50 ou 10,50." : "Qual valor enviar?",
-    teclado: [[{ text: "Voltar", callback_data: "u:z" }]],
+    texto:
+      acao === "receber"
+        ? "Informe o valor a receber, em reais. Exemplo: 50 ou 10,50."
+        : "Informe o valor a enviar, em reais.",
+    teclado: [[{ text: "Cancelar", callback_data: "u:z" }]],
   };
 }
 
 export function telaPedirChave(): TelaUso {
   return {
-    texto: "Qual a chave PIX de destino?",
-    teclado: [[{ text: "Voltar", callback_data: "u:z" }]],
+    texto: "Informe a chave PIX de destino.",
+    teclado: [[{ text: "Cancelar", callback_data: "u:z" }]],
   };
 }
 
@@ -193,13 +220,20 @@ export function telaConfirmarPix(dados: {
 }): TelaUso {
   const taxa =
     dados.interno === true
-      ? "Conta LinhaBank. Sem taxa."
+      ? "Tarifa: isento (conta LinhaBank)"
       : dados.taxa === undefined || dados.taxa === "0,00"
-        ? "PIX para fora. Sem taxa neste momento."
-        : `PIX para fora. Taxa R$ ${dados.taxa}.`;
+        ? "Tarifa: isento neste momento"
+        : `Tarifa: R$ ${dados.taxa}`;
   return {
-    texto: [`Confirme o PIX`, "", `Valor: R$ ${dados.valor}`, `Destino: ${dados.destino}`, taxa].join("\n"),
-    teclado: [[{ text: "Confirmar", callback_data: "u:y" }], [{ text: "Voltar", callback_data: "u:z" }]],
+    texto: [
+      "LINHABANK",
+      "Confirmação de PIX",
+      "",
+      `Valor: R$ ${dados.valor}`,
+      `Destino: ${dados.destino}`,
+      taxa,
+    ].join("\n"),
+    teclado: [[{ text: "Confirmar envio", callback_data: "u:y" }], [{ text: "Cancelar", callback_data: "u:z" }]],
   };
 }
 
@@ -207,14 +241,14 @@ export function telaAjudaMenu(): TelaUso {
   return {
     texto: [
       "LINHABANK",
+      "Operações",
       "",
-      "Neste modo você opera tocando nos botões.",
-      "Saldo e extrato vêm da conta. PIX de envio pede confirmação. Cofrinho e Club abrem a tela deles.",
-      "",
-      "Para conversar, toque em Falar com a Thialinha.",
-      "Para voltar a escolher: /modo",
+      "Este canal opera por botões.",
+      "Receber PIX gera o QR. Enviar PIX pede chave, valor e confirmação.",
+      "O cofrinho separa valor do disponível, sem tarifa e sem rendimento.",
+      "LBcoins do Club não são saldo em real.",
     ].join("\n"),
-    teclado: voltar(),
+    teclado: [[{ text: "Atendimento Thialinha", callback_data: "u:d" }], ...voltar()],
   };
 }
 
@@ -223,14 +257,14 @@ export async function telaAgendamentos(kv: HostKvApi, chatId: string): Promise<T
   const itens = lista.agendamentos;
   const corpo =
     itens.length === 0
-      ? ["Nenhum PIX agendado.", "Para marcar um envio automático, fale com a Thialinha."]
-      : itens.map((item) => `${item.id}: R$ ${item.valor} para ${item.destino}, ${item.repeticao}, próximo em ${item.quando}.`);
+      ? ["Nenhum agendamento ativo.", "Para programar um envio, use o atendimento Thialinha."]
+      : itens.map((item) => `${item.id}  R$ ${item.valor}  ${item.destino}  ${item.repeticao}  próximo ${item.quando}`);
   return {
-    texto: ["PIX agendados", "", ...corpo].join("\n"),
+    texto: ["LINHABANK", "PIX agendados", "", ...corpo].join("\n"),
     teclado: [
       ...itens.map((item) => [{ text: `Cancelar ${item.id}`, callback_data: `u:q:${item.id.toLowerCase().replace(/^ag-/, "ag")}` }]),
-      [{ text: "Falar com a Thialinha", callback_data: "u:d" }],
-      [{ text: "Voltar", callback_data: "u:m" }],
+      ...(itens.length === 0 ? [[{ text: "Atendimento Thialinha", callback_data: "u:d" }]] : []),
+      ...voltar(),
     ],
   };
 }
@@ -251,11 +285,19 @@ export function telaPixEnviado(dados: {
   interno?: boolean;
 }): TelaUso {
   const taxa =
-    dados.interno === true || dados.taxa === undefined || dados.taxa === "0,00" ? "Sem taxa." : `Taxa R$ ${dados.taxa}.`;
+    dados.interno === true || dados.taxa === undefined || dados.taxa === "0,00" ? "Tarifa: isento" : `Tarifa: R$ ${dados.taxa}`;
   const comprovante =
     dados.comprovante === undefined || dados.comprovante.length === 0 ? "" : `\nComprovante ${dados.comprovante}.`;
   return {
-    texto: `PIX de R$ ${dados.valor} enviado para ${dados.destino}. ${taxa} Saldo agora: R$ ${dados.saldo}.${comprovante}`,
+    texto: [
+      "LINHABANK",
+      "PIX enviado",
+      "",
+      `Valor: R$ ${dados.valor}`,
+      `Destino: ${dados.destino}`,
+      taxa,
+      `Disponível: R$ ${dados.saldo}.${comprovante}`,
+    ].join("\n"),
     teclado: voltar(),
   };
 }
@@ -269,7 +311,7 @@ export function textoDepositoMenu(dados: { valor: string; taxa?: string; liquido
     dados.taxa !== undefined && dados.taxa !== "0,00"
       ? `Taxa R$ ${dados.taxa} já inclusa. Entram R$ ${dados.liquido ?? dados.valor} na conta.`
       : "O saldo só entra depois da confirmação.";
-  return [`PIX para depósito`, "", `Pague R$ ${dados.valor}. ${inclusa}`, "", "Copia e cola:", dados.copiaECola].join("\n");
+  return ["LINHABANK", "Depósito PIX", "", `Pague R$ ${dados.valor}. ${inclusa}`, "", "Copia e cola:", dados.copiaECola].join("\n");
 }
 
 export async function aplicarModo(kv: HostKvApi, chatId: string, modo: ModoUso): Promise<void> {
@@ -292,7 +334,7 @@ export function contaBloqueada(motivo: string | undefined, saldo?: string): Tela
 }
 
 export async function voltarMenuSePrecisar(kv: HostKvApi, chatId: string): Promise<BotaoUso[][]> {
-  return (await lerModoUso(kv, chatId)) === "menu" ? [[{ text: "Voltar ao menu", callback_data: "u:m" }]] : [];
+  return (await lerModoUso(kv, chatId)) === "menu" ? [[{ text: "Menu da conta", callback_data: "u:m" }]] : [];
 }
 
 function voltar(): BotaoUso[][] {

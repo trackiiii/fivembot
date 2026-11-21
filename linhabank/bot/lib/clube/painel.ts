@@ -22,18 +22,21 @@ export type TelaClube = {
 
 export type AbaClube = "home" | "categoria" | "saldo" | "indicar" | "indicacoes" | "historico" | "como" | "beneficios";
 
-function nav(aba: AbaClube, extra: BotaoClube[][] = []): BotaoClube[][] {
-  const marca = (id: AbaClube, rotulo: string, dados: string): BotaoClube => ({
-    text: aba === id ? `• ${rotulo}` : rotulo,
-    callback_data: dados,
-  });
+function opcoesHome(extra: BotaoClube[][] = []): BotaoClube[][] {
   return [
-    [marca("categoria", "Categoria", "c:t"), marca("saldo", "LBcoins", "c:s"), marca("indicar", "Indicar", "c:i")],
-    [marca("indicacoes", "Indicações", "c:m"), marca("historico", "Histórico", "c:r")],
-    [marca("como", "Como ganhar", "c:g"), marca("beneficios", "Benefícios", "c:b")],
-    [{ text: "Club", callback_data: "c:h" }],
+    [{ text: "Categoria", callback_data: "c:t" }],
+    [{ text: "LBcoins", callback_data: "c:s" }],
+    [{ text: "Indicar", callback_data: "c:i" }],
+    [{ text: "Indicações", callback_data: "c:m" }],
+    [{ text: "Histórico", callback_data: "c:r" }],
+    [{ text: "Como ganhar", callback_data: "c:g" }],
+    [{ text: "Benefícios", callback_data: "c:b" }],
     ...extra,
   ];
+}
+
+function voltarClub(extra: BotaoClube[][] = []): BotaoClube[][] {
+  return [[{ text: "Voltar", callback_data: "c:h" }], ...extra];
 }
 
 export function parseAcaoClube(dados: string): AbaClube | undefined {
@@ -65,15 +68,15 @@ export async function montarClube(kv: HostKvApi, chatId: string, aba: AbaClube =
 function telaHome(resumo: ResumoClube, extra: BotaoClube[][] = []): TelaClube {
   return {
     texto: [
-      "⭐ LINHABANK CLUB",
+      "LINHABANK CLUB",
       "",
-      `Categoria: ${rotuloCategoria(resumo.categoria)} · ${resumo.xp} XP`,
+      `Categoria: ${rotuloCategoria(resumo.categoria)}  ·  ${resumo.xp} XP`,
       `LBcoins: ${resumo.saldo}`,
-      `Indicações aprovadas: ${resumo.aprovadas} · pendentes: ${resumo.pendentes}`,
+      `Indicações aprovadas: ${resumo.aprovadas}  ·  pendentes: ${resumo.pendentes}`,
       "",
       "LBcoins são pontos de fidelidade. Não são saldo, Pix nem dinheiro sacável.",
     ].join("\n"),
-    teclado: nav("home", extra),
+    teclado: opcoesHome(extra),
   };
 }
 
@@ -102,7 +105,7 @@ async function telaCategoria(
       "EVOLUÇÃO",
       ...linhas,
     ].join("\n"),
-    teclado: nav("categoria", extra),
+    teclado: voltarClub(extra),
   };
 }
 
@@ -128,7 +131,7 @@ async function telaSaldo(
       "",
       ...linhas,
     ].join("\n"),
-    teclado: nav("saldo", extra),
+    teclado: voltarClub(extra),
   };
 }
 
@@ -147,7 +150,7 @@ function telaIndicar(resumo: ResumoClube, extra: BotaoClube[][] = []): TelaClube
       "",
       "Você não pode indicar a si mesmo. Cada pessoa só pode ser indicada uma vez.",
     ].join("\n"),
-    teclado: nav("indicar", extra),
+    teclado: voltarClub(extra),
   };
 }
 
@@ -172,7 +175,7 @@ async function telaIndicacoes(
       "",
       ...linhas,
     ].join("\n"),
-    teclado: nav("indicacoes", extra),
+    teclado: voltarClub(extra),
   };
 }
 
@@ -189,7 +192,7 @@ async function telaHistorico(
       : hist.map((item) => `${formatarQuando(item.em)}  +${item.quantidade} ${item.tipo} · ${item.descricao}`);
   return {
     texto: ["Histórico de recompensas", "", `Saldo atual: ${resumo.saldo}`, "", ...linhas].join("\n"),
-    teclado: nav("historico", extra),
+    teclado: voltarClub(extra),
   };
 }
 
@@ -205,7 +208,7 @@ function telaComo(resumo: ResumoClube, extra: BotaoClube[][] = []): TelaClube {
       "",
       `Seu código agora: ${resumo.codigo}`,
     ].join("\n"),
-    teclado: nav("como", extra),
+    teclado: voltarClub(extra),
   };
 }
 
@@ -218,7 +221,7 @@ function telaBeneficios(resumo: ResumoClube, extra: BotaoClube[][] = []): TelaCl
       "",
       "Só listamos o que já existe. Campanha inexistente não aparece como benefício.",
     ].join("\n"),
-    teclado: nav("beneficios", extra),
+    teclado: voltarClub(extra),
   };
 }
 

@@ -237,7 +237,7 @@ async function despachar(atualizacao: MensagemRecebida, deps: Despacho): Promise
   );
   if (uso === "menu" || uso === "escolha") return;
   if (uso === "dialogo") {
-    await enviarPadrao(deps.kv, atualizacao, "Combinado. Pode escrever. Se quiser os botões de novo, manda /menu.", {
+    await enviarPadrao(deps.kv, atualizacao, "Atendimento com a Thialinha. Escreva o que precisa. Para voltar às operações, use /menu.", {
       teclado: tecladoTrocarMenu(),
     });
     return;
