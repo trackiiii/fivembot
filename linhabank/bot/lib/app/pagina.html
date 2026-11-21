@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>LinhaBank</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --ink: #1b1916;
+      --muted: #6b645a;
+      --card: #fffcf7;
+      --line: #e4ddd1;
+      --green: #1f6b4a;
+      --green-2: #164e36;
+      --warn: #8a5a12;
+      --bad: #8b2e2e;
+      --ok: #1f6b4a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      padding: 16px 16px 28px;
+    }
+    header { margin-bottom: 16px; }
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    h1 { font-size: 22px; font-weight: 650; margin: 4px 0 0; }
+    .sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .saldo {
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin: 8px 0 4px;
+    }
+    .meta { font-size: 13px; color: var(--muted); line-height: 1.45; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    button, .btn {
+      appearance: none;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .primary { background: var(--green); color: #fff; width: 100%; }
+    .primary:active { background: var(--green-2); }
+    .ghost { background: #efe9dd; color: var(--ink); width: 100%; }
+    .danger { background: #f4e4e4; color: var(--bad); width: 100%; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 6px; }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 12px;
+      padding: 12px;
+      font: inherit;
+    }
+    .aviso {
+      background: #fff6e0;
+      color: var(--warn);
+      border: 1px solid #ead7a6;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      margin: 12px 0;
+    }
+    .erro { background: #f8ecec; color: var(--bad); border-color: #e3c4c4; }
+    .ok { background: #e8f3ed; color: var(--ok); border-color: #c5ddcf; }
+    .qr { display: block; width: min(240px, 70vw); margin: 12px auto; background: #fff; padding: 8px; border-radius: 12px; }
+    .copia {
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      word-break: break-all;
+      background: #efe9dd;
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .hidden { display: none; }
+    .linha { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .linha:last-child { border-bottom: 0; }
+    .voltar { margin-bottom: 12px; }
+    .pill { display: inline-block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">LinhaBank</div>
+    <h1 id="ola">Thialinha aqui</h1>
+    <p class="sub" id="modo"></p>
+  </header>
+
+  <div id="tela-home">
+    <div class="card">
+      <div class="meta">Saldo da conta</div>
+      <div class="saldo" id="saldo">R$ —</div>
+      <div class="meta" id="cofrinho"></div>
+      <div class="meta" id="dados-conta">Abrindo sua conta…</div>
+    </div>
+    <div class="grid">
+      <button class="ghost" data-ir="depositar">Receber PIX</button>
+      <button class="ghost" data-ir="pix">Enviar PIX</button>
+      <button class="ghost" data-ir="extrato">Extrato</button>
+      <button class="ghost" id="btn-cartao">Cartão</button>
+    </div>
+    <p class="meta" style="margin-top:14px">No chat, a Thialinha continua te atendendo em texto. Este app não inventa saldo: o valor vem da conta.</p>
+  </div>
+
+  <div id="tela-sem" class="hidden">
+    <div class="card">
+      <p>A conta ainda não está aberta neste chat.</p>
+      <p class="meta">Volte para a conversa com a Thialinha, envie /start e responda CONCORDO. Depois o saldo aparece aqui.</p>
+    </div>
+  </div>
+
+  <div id="tela-depositar" class="hidden">
+    <button class="ghost voltar" data-ir="home">Voltar</button>
+    <div class="card">
+      <h2 style="margin:0 0 8px;font-size:18px">Receber PIX</h2>
+      <p class="meta">Eu gero o QR e o copia e cola. O saldo só muda quando o pagamento confirmar.</p>
+      <label for="valor-dep">Valor</label>
+      <input id="valor-dep" inputmode="decimal" placeholder="50,00">
+      <div style="height:12px"></div>
+      <button class="primary" id="gerar">Gerar PIX</button>
+      <div id="dep-msg"></div>
+      <img id="qr" class="qr hidden" alt="QR Code do PIX">
+      <p id="copia" class="copia hidden"></p>
+      <button class="ghost hidden" id="copiar">Copiar código</button>
+    </div>
+  </div>
+
+  <div id="tela-pix" class="hidden">
+    <button class="ghost voltar" data-ir="home">Voltar</button>
+    <div class="card">
+      <h2 style="margin:0 0 8px;font-size:18px">Enviar PIX</h2>
+      <label for="chave-pix">Chave ou conta LinhaBank</label>
+      <input id="chave-pix" placeholder="e-mail, celular, CPF ou lb…">
+      <label for="valor-pix">Valor</label>
+      <input id="valor-pix" inputmode="decimal" placeholder="10,00">
+      <div style="height:12px"></div>
+      <button class="primary" id="revisar">Revisar</button>
+      <div id="pix-preview" class="hidden">
+        <div class="aviso" id="pix-resumo"></div>
+        <button class="primary" id="confirmar">Confirmar envio</button>
+      </div>
+      <div id="pix-msg"></div>
+    </div>
+  </div>
+
+  <div id="tela-extrato" class="hidden">
+    <button class="ghost voltar" data-ir="home">Voltar</button>
+    <div class="card">
+      <h2 style="margin:0 0 8px;font-size:18px">Extrato</h2>
+      <div id="lista-extrato" class="meta">Carregando…</div>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      try { tg.setHeaderColor("#f3efe6"); } catch (e) {}
+    }
+
+    const telas = ["home", "sem", "depositar", "pix", "extrato"];
+    function ir(nome) {
+      telas.forEach((id) => {
+        document.getElementById("tela-" + id).classList.toggle("hidden", id !== nome);
+      });
+    }
+    document.querySelectorAll("[data-ir]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const dest = el.getAttribute("data-ir");
+        ir(dest);
+        if (dest === "home") carregar();
+        if (dest === "extrato") carregarExtrato();
+      });
+    });
+
+    function aviso(el, texto, tipo) {
+      if (!texto) { el.innerHTML = ""; return; }
+      el.innerHTML = '<div class="aviso ' + (tipo || "") + '"></div>';
+      el.firstChild.textContent = texto;
+    }
+
+    async function api(acao, extra) {
+      const headers = { "content-type": "application/json" };
+      const init = tg && tg.initData;
+      if (init) headers.Authorization = "tma " + init;
+      const r = await fetch("/v1/channels/app/api", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(Object.assign({ acao: acao }, extra || {})),
+      });
+      return r.json();
+    }
+
+    function reais(valor) {
+      return valor ? "R$ " + valor : "R$ —";
+    }
+
+    async function carregar() {
+      const dados = await api("resumo");
+      const modo = document.getElementById("modo");
+      if (dados.motivo === "nao_autenticado") {
+        document.getElementById("dados-conta").textContent = dados.mensagem || "Abra pelo botão LinhaBank no Telegram.";
+        modo.textContent = "Mini-app do Telegram";
+        return;
+      }
+      modo.textContent = dados.modo === "live" ? "Conta em operação" : "Ambiente de teste · sandbox";
+      if (dados.nome && dados.nome !== "cliente") {
+        document.getElementById("ola").textContent = "Oi, " + dados.nome;
+      } else {
+        document.getElementById("ola").textContent = "Oi, eu sou a Thialinha";
+      }
+      if (dados.motivo === "sem_conta" || dados.aberta === false) {
+        ir("sem");
+        return;
+      }
+      document.getElementById("saldo").textContent = reais(dados.saldo);
+      const cofre = document.getElementById("cofrinho");
+      cofre.textContent = dados.guardado && dados.guardado !== "0,00" ? "No cofrinho: R$ " + dados.guardado + ". Esse valor não entra no PIX." : "";
+      const c = dados.conta || {};
+      document.getElementById("dados-conta").textContent =
+        "Agência " + (c.agencia || "—") +
+        " · Conta " + (c.numero || "—") +
+        " · Chave " + (c.chaveTransferencia || "—");
+      const btn = document.getElementById("btn-cartao");
+      btn.textContent = c.cartaoBloqueado ? "Desbloquear cartão" : "Bloquear cartão";
+      btn.dataset.bloquear = c.cartaoBloqueado ? "0" : "1";
+    }
+
+    document.getElementById("gerar").addEventListener("click", async () => {
+      const valor = document.getElementById("valor-dep").value.trim();
+      const msg = document.getElementById("dep-msg");
+      const qr = document.getElementById("qr");
+      const copia = document.getElementById("copia");
+      const copiar = document.getElementById("copiar");
+      qr.classList.add("hidden");
+      copia.classList.add("hidden");
+      copiar.classList.add("hidden");
+      aviso(msg, "Gerando…", "");
+      const dados = await api("depositar", { valor: valor });
+      aviso(msg, dados.mensagem || "Pronto.", dados.ok ? "ok" : "erro");
+      if (!dados.ok) return;
+      if (dados.qr) { qr.src = dados.qr; qr.classList.remove("hidden"); }
+      if (dados.copiaECola) {
+        copia.textContent = dados.copiaECola;
+        copia.classList.remove("hidden");
+        copiar.classList.remove("hidden");
+      }
+    });
+
+    document.getElementById("copiar").addEventListener("click", async () => {
+      const texto = document.getElementById("copia").textContent;
+      try { await navigator.clipboard.writeText(texto); } catch (e) {}
+    });
+
+    document.getElementById("revisar").addEventListener("click", async () => {
+      const chave = document.getElementById("chave-pix").value.trim();
+      const valor = document.getElementById("valor-pix").value.trim();
+      const dados = await api("consultar", { chave: chave, valor: valor });
+      const box = document.getElementById("pix-preview");
+      const resumo = document.getElementById("pix-resumo");
+      const msg = document.getElementById("pix-msg");
+      if (!dados.ok) {
+        box.classList.add("hidden");
+        aviso(msg, dados.mensagem || "Não deu para revisar.", "erro");
+        return;
+      }
+      aviso(msg, "", "");
+      resumo.textContent = (dados.mensagem || "Revise os dados.") + " Valor " + reais(valor) + " para " + (dados.destino || chave) + ".";
+      box.classList.remove("hidden");
+    });
+
+    document.getElementById("confirmar").addEventListener("click", async () => {
+      const chave = document.getElementById("chave-pix").value.trim();
+      const valor = document.getElementById("valor-pix").value.trim();
+      const msg = document.getElementById("pix-msg");
+      aviso(msg, "Enviando…", "");
+      const dados = await api("enviar", { chave: chave, valor: valor, confirmar: true });
+      aviso(msg, dados.mensagem || (dados.ok ? "Enviado." : "Não enviado."), dados.ok ? "ok" : "erro");
+      if (dados.ok) {
+        document.getElementById("pix-preview").classList.add("hidden");
+        carregar();
+      }
+    });
+
+    document.getElementById("btn-cartao").addEventListener("click", async () => {
+      const bloquear = document.getElementById("btn-cartao").dataset.bloquear === "1";
+      await api("cartao", { bloquear: bloquear });
+      carregar();
+    });
+
+    async function carregarExtrato() {
+      const lista = document.getElementById("lista-extrato");
+      lista.textContent = "Carregando…";
+      const dados = await api("extrato");
+      const itens = dados.extrato || [];
+      if (itens.length === 0) {
+        lista.textContent = (dados.mensagem || "Ainda não há movimentação.") + " Saldo " + reais(dados.saldo) + ".";
+        return;
+      }
+      lista.innerHTML = "";
+      itens.slice().reverse().forEach((item) => {
+        const linha = document.createElement("div");
+        linha.className = "linha";
+        const a = document.createElement("div");
+        a.textContent = item.tipo + " · " + (item.descricao || "");
+        const b = document.createElement("div");
+        b.textContent = "R$ " + item.valor;
+        linha.appendChild(a);
+        linha.appendChild(b);
+        lista.appendChild(linha);
+      });
+    }
+
+    carregar().catch(() => {
+      document.getElementById("dados-conta").textContent = "Abra este app pelo botão LinhaBank no Telegram.";
+    });
+  </script>
+</body>
+</html>
