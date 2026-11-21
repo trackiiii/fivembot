@@ -194,7 +194,7 @@ export function classificarTexto(textoBruto: string, pendente?: "valor_deposito"
     return { categoria: "transferencias", confianca: 0.8 };
   }
 
-  if (tem(texto, ["abrir conta", "criar conta", "me cadastr", "termos", "/start", "concordo", "como abro"])) {
+  if (tem(texto, ["abrir conta", "criar conta", "me cadastr", "termos", "/start", "concordo", "aceitar e continuar", "como abro"])) {
     return { categoria: "cadastro", confianca: 0.85 };
   }
 

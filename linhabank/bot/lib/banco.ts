@@ -38,7 +38,7 @@ import {
 import { garantirConfig, configAtual } from "./config.js";
 import { depositoComTaxa, taxaPixExternoCentavos, taxaPixExternoRecebimentoCentavos } from "./taxa.js";
 
-export const TERMOS_VERSAO = "2026-11-15-2";
+export const TERMOS_VERSAO = "2026-11-21";
 export const AGENCIA = "0001";
 
 export function contaInativa(status: string | undefined): boolean {
@@ -173,21 +173,78 @@ export type ResultadoOperacao = {
 };
 
 export const TEXTO_TERMOS = [
-  "Termos de abertura de conta LinhaBank",
+  "📄 TERMOS DE USO E ABERTURA DE CONTA — LUNEX",
   "",
-  "A conta só é aberta com a sua concordância.",
+  "Última atualização: 21/11/2026",
   "",
-  "1. A conta é individual e de sua titularidade.",
-  "2. Agência, número da conta e chave de transferência identificam a sua conta nas movimentações entre clientes LinhaBank.",
-  "3. Saldo, extrato, PIX, PIX agendado, transferência, pagamento de boleto, cartão virtual e cofrinho são serviços desta conta.",
-  "4. Neste atendimento não são solicitados senha, código de verificação, CVV nem o número completo do cartão.",
-  "5. O uso da conta observa a legislação aplicável. O LinhaBank pode recusar uma operação ou encerrar a conta em caso de uso irregular.",
-  "6. O PIX agendado, depois de confirmado neste atendimento, é enviado automaticamente no horário definido, até que seja cancelado.",
-  "7. PIX entre contas LinhaBank, identificado pela chave da conta, não tem taxa. PIX para outras instituições pode ter taxa, informada antes da confirmação.",
-  "8. Depósito via PIX só entra no saldo depois da confirmação do pagamento. Foto ou texto de comprovante enviado neste chat não credita valor.",
-  "9. O cofrinho separa um valor do saldo disponível. Não tem taxa nem rendimento. O PIX usa só o que ficou disponível. Resgatar devolve o valor para a conta.",
+  "Ao selecionar ACEITAR E CONTINUAR, você declara que leu e concorda com os seguintes termos:",
   "",
-  "Para abrir a conta, toque em Concordo ou responda CONCORDO.",
+  "1. ABERTURA DE CONTA",
+  "",
+  "A Lunex é uma plataforma digital de gerenciamento de carteira e movimentações financeiras, acessível pelo Telegram. Cada usuário terá uma conta individual vinculada ao seu Telegram ID, podendo ser solicitadas informações adicionais para identificação e validação cadastral.",
+  "",
+  "O usuário deverá fornecer dados verdadeiros e atualizados.",
+  "",
+  "2. CARTEIRA E SALDO",
+  "",
+  "Cada cliente terá uma carteira individual, com saldo, histórico de movimentações e informações próprias. Os valores apresentados estarão sujeitos à confirmação e validação das operações.",
+  "",
+  "3. RECEBIMENTOS E ENVIOS",
+  "",
+  "A Lunex poderá disponibilizar operações de recebimento e envio via PIX. As transações estarão sujeitas à disponibilidade de saldo, limites, validações de segurança e confirmação do processamento.",
+  "",
+  "O usuário é responsável por conferir os dados do destinatário antes de confirmar qualquer envio.",
+  "",
+  "4. TARIFAS",
+  "",
+  "A tarifa padrão por transação será composta por:",
+  "",
+  "- Taxa fixa: R$ 2,00.",
+  "- Taxa variável: 15% sobre o valor da operação.",
+  "",
+  "O valor total das tarifas e o valor líquido da operação deverão ser apresentados antes da confirmação.",
+  "",
+  "5. LIMITES OPERACIONAIS",
+  "",
+  "A Lunex poderá estabelecer limites mínimos e máximos por transação e limites de movimentação. Os limites poderão variar conforme o cadastro, a modalidade da operação e os critérios de segurança.",
+  "",
+  "6. SEGURANÇA",
+  "",
+  "O usuário é responsável pela segurança de sua conta no Telegram e não deverá compartilhar seu acesso com terceiros. Qualquer suspeita de acesso indevido deverá ser comunicada ao suporte oficial.",
+  "",
+  "7. PREVENÇÃO A FRAUDES",
+  "",
+  "É proibido utilizar a Lunex para fraudes, lavagem de dinheiro ou qualquer atividade ilícita. Operações suspeitas poderão passar por análise, validação ou restrição, conforme a legislação aplicável.",
+  "",
+  "8. BLOQUEIOS E SUSPENSÕES",
+  "",
+  "A Lunex poderá suspender temporariamente contas ou operações diante de suspeitas de irregularidades, questões de segurança ou obrigações legais. Eventuais valores pertencentes ao cliente deverão receber o tratamento legal e contratual aplicável.",
+  "",
+  "9. DISPONIBILIDADE",
+  "",
+  "Os serviços poderão sofrer manutenções, atualizações ou interrupções técnicas, inclusive por indisponibilidade de prestadores externos.",
+  "",
+  "10. PRIVACIDADE",
+  "",
+  "Os dados pessoais serão tratados conforme a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018), para finalidades como cadastro, identificação, segurança, processamento de operações e cumprimento de obrigações legais.",
+  "",
+  "11. ENCERRAMENTO",
+  "",
+  "O usuário poderá solicitar o encerramento da conta pelos canais oficiais, observadas as operações pendentes e obrigações legais.",
+  "",
+  "12. ALTERAÇÕES",
+  "",
+  "A Lunex poderá atualizar estes termos, comunicando alterações relevantes e solicitando novo aceite quando necessário.",
+  "",
+  "13. ACEITE ELETRÔNICO",
+  "",
+  "Ao aceitar, o usuário autoriza o registro de seu Telegram ID, data, horário e versão dos termos, como comprovante de sua manifestação de concordância.",
+  "",
+  "O usuário declara possuir capacidade legal para contratar e utilizar os serviços.",
+  "",
+  "LUNEX — LINHAGROUP",
+  "",
+  "Sua carteira. Suas movimentações. Seu controle.",
 ].join("\n");
 
 export const TEXTO_RECUSA =
@@ -203,7 +260,9 @@ export function decidirTermos(texto: string): "concordo" | "recuso" | "pedir" | 
   if (limpo === "/start" || limpo.startsWith("/start ") || limpo === "/ajuda" || limpo.startsWith("/ajuda ")) {
     return "pedir";
   }
-  if (/^(concordo|eu concordo|aceito|aceito os termos|sim, concordo|sim concordo)$/.test(limpo)) {
+  if (
+    /^(concordo|eu concordo|aceito|aceito os termos|aceitar e continuar|sim, concordo|sim concordo)$/.test(limpo)
+  ) {
     return "concordo";
   }
   if (/^(não concordo|nao concordo|recuso|agora não|agora nao)$/.test(limpo)) return "recuso";

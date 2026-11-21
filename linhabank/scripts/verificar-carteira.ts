@@ -25,9 +25,16 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   throw new Error(`rede bloqueada no teste: ${new URL(url).host}`);
 };
 
-const { aceitarTermos, bloquearConta, confirmarCobrancaSandbox, creditarPixRecebido, operarConta } = await import(
-  "../bot/lib/banco.js"
-);
+const {
+  aceitarTermos,
+  bloquearConta,
+  confirmarCobrancaSandbox,
+  creditarPixRecebido,
+  decidirTermos,
+  operarConta,
+  TERMOS_VERSAO,
+  TEXTO_TERMOS,
+} = await import("../bot/lib/banco.js");
 const { montarCopiaECola } = await import("../bot/lib/brcode.js");
 const { comVozThialinha, interpretarAtualizacao } = await import("../bot/lib/atendimento.js");
 const { sqlDisponivel } = await import("../bot/lib/db.js");
@@ -62,6 +69,16 @@ async function saldoDe(kv: HostKvApi, chatId: string): Promise<number> {
   const conta = await operarConta(kv, chatId, `saldo:${chatId}:${Math.random()}`, { acao: "resumo" });
   const [reais, cents] = (conta.saldo ?? "0,00").split(",");
   return Number(reais) * 100 + Number(cents);
+}
+
+{
+  assert(TEXTO_TERMOS.includes("TERMOS DE USO E ABERTURA DE CONTA — LUNEX"), "termos sem título Lunex");
+  assert(TEXTO_TERMOS.includes("Taxa fixa: R$ 2,00."), "termos sem taxa fixa");
+  assert(TEXTO_TERMOS.includes("Taxa variável: 15%"), "termos sem taxa variável");
+  assert(TEXTO_TERMOS.includes("Lei nº 13.709/2018"), "termos sem LGPD");
+  assert(TERMOS_VERSAO === "2026-11-21", `versão dos termos: ${TERMOS_VERSAO}`);
+  assert(decidirTermos("ACEITAR E CONTINUAR") === "concordo", "aceite do botão não abre a conta");
+  assert(decidirTermos("CONCORDO") === "concordo", "CONCORDO deixou de abrir a conta");
 }
 
 {

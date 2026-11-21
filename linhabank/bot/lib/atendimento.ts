@@ -736,20 +736,16 @@ export const AVISO_FALHA =
   "Travou daqui. Manda de novo daqui a pouco que eu te cubro.";
 
 export async function enviarTermos(chatId: string, mensagemId?: number): Promise<boolean> {
-  const termos = comParseHtml(comVozThialinha(TEXTO_TERMOS), true);
   const corpo: Record<string, unknown> = {
     chat_id: chatId,
-    text: termos.text,
+    text: TEXTO_TERMOS,
     reply_markup: {
       inline_keyboard: [
-        [
-          { text: "Concordo", callback_data: "termos:concordo" },
-          { text: "Não concordo", callback_data: "termos:recuso" },
-        ],
+        [{ text: "ACEITAR E CONTINUAR", callback_data: "termos:concordo" }],
+        [{ text: "Não concordo", callback_data: "termos:recuso" }],
       ],
     },
   };
-  if (termos.parse_mode !== undefined) corpo.parse_mode = termos.parse_mode;
   if (mensagemId !== undefined && mensagemId > 0) corpo.reply_parameters = { message_id: mensagemId };
   return chamarTelegram("sendMessage", corpo);
 }
